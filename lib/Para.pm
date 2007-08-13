@@ -82,7 +82,6 @@ sub store_cfg
 
 sub on_done ()
 {
-    Rit::Base->on_done();
 }
 
 
@@ -115,17 +114,12 @@ sub initialize_db
 {
     debug "initialize_db";
 
-    if( $ARGV[0] and ($ARGV[0] eq 'setup_db') )
-    {
-	Para::Setup->setup_db();
-    }
-
     return; ### NOTHING TO DO HERE NOW
 
     my $dbh =  $Rit::dbix->dbh;
 
-    my( $args, $arclim, $res ) = parse_propargs('auto');
     my $req = Para::Frame::Request->new_bgrequest();
+    my( $args, $arclim, $res ) = parse_propargs('auto');
 
     my $R = Rit::Base->Resource;
     my $P = Rit::Base->Pred;

@@ -62,6 +62,7 @@ use Rit::Base::Pred;
 use Rit::Base::Rule;
 use Rit::Base::Time;
 use Rit::Base::Site;
+use Rit::Base::User::Meta;
 
 use Para;
 
@@ -124,6 +125,7 @@ use Para;
     my $cfg =
     {
      'paraframe'       => $CFG->{'paraframe'},
+     'rb_root'         => $CFG->{'rb_root'},
      'paraframe_group' => 'psi_cgi',
 
      'appback'         => $appback,
@@ -131,7 +133,8 @@ use Para;
      'appfmly'         => 'Rit::Base',
 #     'tt_plugins'      => 'Rit::Guides::Template::Plugin',
 
-     'user_class'      => 'Para::Member::Meta',
+#     'user_class'      => 'Para::Member::Meta',
+     'user_class'      => 'Rit::Base::User::Meta',
      'session_class'   => 'Rit::Base::Session',
 #     'resource_class'  => 'Rit::Base::Resource',
      'search_collection_class' => 'Rit::Base::Search::Collection',
@@ -139,7 +142,9 @@ use Para;
      'l10n_class'      => 'Rit::Base::L10N',
      'site_class'      => 'Rit::Base::Site',
 
-     'bg_user_code'    => sub{ Rit::Base::Resource->get_by_constant_label('creation') },
+#     'rb_default_source' => 'paranormal_sweden_creation',
+
+#     'bg_user_code'    => sub{ Rit::Base::Resource->get_by_constant_label('creation') },
      'logfile'         => "$pc_root/logs/ritguides.log",
      'pidfile'         => "$pc_root/var/creation.pid",
      'dir_var'         => "$pc_root/var",
@@ -192,6 +197,7 @@ use Para;
     Para::Frame->add_hook('on_startup', sub
 			  {
 			      $Rit::dbix->connect;
+			      Para::Setup->setup_db;
 			  });
 
     Para::Frame->add_hook('on_ritbase_ready', sub

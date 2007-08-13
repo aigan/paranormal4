@@ -1,7 +1,7 @@
 # -*- perl -*-
 
 $VAR1 = {
-	 'p4_root'    => '/home/jonas/para.se/p4',
+	 'pc_root'    => '/home/jonas/para.se/p4',
 	 'rb_root'    => '/home/jonas/para.se/rb',
 	 'web_import' => 1,
 	 'paraframe'  => '/home/jonas/para.se/pf',

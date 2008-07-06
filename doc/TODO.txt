@@ -1,0 +1,133 @@
+ * När watchdog sänder soft HUP till demonen; vägra ta emot nya requests, men ta emot fortsättnignsrequests. Gör det genom att skicka signal till klienten att vänta lite...
+
+ * Hantera HEAD-requests
+
+ * Hantera avbrutna requests
+
+ * Registera childs hos watchdog. Låt watchdog döda de som fastnar?
+
+ * Rapportera child-info när HUP mottages
+
+ * skrivom inet.d-programmet för att fungera bättre
+
+ * create static files in background
+
+ * See sökning på psykologi på startsidan
+
+-- 
+
+local $SIG{ALRM} = sub { die "Timed Out!\n" };
+my $timeout = 30;
+my $previous_alarm = alarm($timeout);
+... do stuff
+alarm($previous_alarm);
+
+
+=======================================================
+DONE:
+
+ * Vid restart. Se till att alla barn är döda först
+ * egen varkatalog för varje demon, för ttc, etc
+ * Se till att robotar inte följer länkar i /topic/
+ * Kolla så att vi inte missar några SIG CHLD
+ * Redirekta till backup när demonen inte svarar
+ * use port backups also!
+
+
+
+
+---------------
+
+okt 11 16:42:36 <ekshus>	jonas
+okt 11 16:42:48 <ekshus>	kanske hör det hemma bland buggar?
+okt 11 16:43:07 <ekshus>	gick in på "Lägg till en ny text"
+okt 11 16:44:22 <ekshus>	FIck upp "Försök misslyckades .. No topic given at /var/www/paranormal.se/lib/Para/Interests.pm. line 266
+okt 11 16:45:19 <ekshus>	befann mig på /of/member/db/topic/edit/new_entry.tt
+okt 11 16:45:43 <ekshus>	(... edit/text.tt? tid=588840
+okt 11 16:45:57 <ekshus>	ok- hel röd ilsken ruta:)
+okt 11 16:46:09 <Aurorawicca>	Tack för att du försökte...
+okt 11 16:46:33 <ekshus>	?
+
+
+okt 11 23:18:06 <kufisk>	jonas: jag undrar varför opparna påstår att jag verkat under nicket remo på torget
+okt 11 23:21:22 <kufisk>	jonas: jag trodde att de kunde se att så inte är fallet
+okt 11 23:22:07 <isdamen|bbl>	kufisk = hypogymnia
+okt 11 23:24:09 <kufisk>	jonas: jag skulle även vilja be Marius om ursäkt för att jag hade en dålig kväll för sådär sex veckor sedan, har därefter haft andra nick men inget som lett till någon större irritation
+okt 11 23:26:04 <kufisk>	jonas: ansöker härmed ödmjukast om att få använda mitt första nick som var hypogymnia så att jag slipper använda andra
+okt 11 23:26:21 <kufisk>	jonas: jag har aldrig hetat remo
+okt 11 23:31:47 <kufisk>	jonas: till saken hör att jag oftast gått under namnet kufisk samt att jag inte gjort det till någon direkt hemlighet för de andra att jag är hypogymnia, vilket jag antagit att även opparna sett
+okt 11 23:32:44 <kufisk>	jonas: ansöker härmed om nåd.....underskrift:hypogymnia
+okt 11 23:36:46 --	isdamen|bbl (~Anchorite@h109n3c1o968.bredband.skanova.com) har lämnat #devel
+okt 12 00:28:00 ---	kufisk är nu känd som kufisk|tv
+okt 12 00:42:23 ---	Violstrand|tel är nu känd som Violstrand
+okt 12 00:55:45 ---	liberum är nu känd som liberum|borta
+okt 12 00:57:05 ---	kufisk|tv är nu känd som kufisk
+okt 12 01:15:14 <--	Violstrand har avslutat ()
+okt 12 01:22:52 <kufisk>	jonas: förresten så skrev denna dam som ovan nämnde mitt tidigare nick att jag är bannad, och då för att falskeligen blivit anklagad för att vara någon annan som jag aldrig varit. Hon kanske hade en dålig dag och reagerade i affekt och då är det väl förlåtligt så jag tänker inte hysa något agg mot henne i framtiden.
+okt 12 01:24:38 <kufisk>	ber om ursäkt för att ha tagit upp såna här petitesser i denna kanal som är vikt för sidans utveckling och hoppas att du har överseende med detta. 
+okt 12 01:31:20 <kufisk>	Själv så tycker jag att jag i det stora hela är ett positivt element för parachatten och hälsar alla nya paraintresserade varmt välmkomna i mitt hjärta och har även jälpt en del som inte riktigt har vetat vart de ska vända sig med sin upptäckariver eller sina problem, och hänvisat dem till #hjälp eller lärt dem lite om hur chatten fungerar samt om det har varit av allvarligare karaktär vidarebefordrat ärenden till ett kunnigare klientel.
+okt 12 01:31:45 <kufisk>	hej svejs
+okt 12 01:37:03 <--	kufisk har avslutat (Quit: CGI:IRC)
+okt 12 02:28:32 -->	Nifelheim (~nuclear_b@c83-250-42-146.bredband.comhem.se) gick in i #devel
+okt 12 02:40:08 -->	kufisk (www-data@paranormal.se) gick in i #devel
+okt 12 02:41:36 --	kufisk (www-data@paranormal.se) har lämnat #devel
+okt 12 02:42:15 --	Nifelheim (~nuclear_b@c83-250-42-146.bredband.comhem.se) har lämnat #devel
+
+---------
+
+
+428 Handling new request
+# http://paranormal.se/
+# 2005-09-25 14.13.58 - 81.229.23.104
+# Sid 1127650438-428 - Uid 0 - debug 1
+  Finding template /index.tt
+FALLBACK!
+ROLLBACK DB
+Referer from current http req (http://sea.search.msn.se/dnserror.aspx?FORM=DNSAS&q=www.uppslagsbok.se)
+!!New step in route: /?caller_page=%2Fdnserror.aspx
+denied error - Du måste vara minst nivå 5
+Finding template /login.tt
+FALLBACK!
+ROLLBACK DB
+Referer from current http req (http://sea.search.msn.se/dnserror.aspx?FORM=DNSAS&q=www.uppslagsbok.se)
+!!New step in route: /?caller_page=%2Fdnserror.aspx
+denied error - Du måste vara minst nivå 5
+428 Done
+
+
+--------------------
+
+14:02:27 GMT Server: Apache/1.3.33 (Debian GNU/Linux) PHP/4.3.10-15 mod_ssl/2.8.22 OpenSSL/0.9.7d mod_perl/1.29 Pragma: no-cache Cache-Control: no-cache Location: http://paranormal.se/topic/olof.html Content-Length: 43 Keep-Alive: timeout=5 Connection: Keep-Alive, Keep-Alive Content-Type: text/plain Go to http://paranormal.se/topic/olof.html HTTP/1.1 200 OK Transfer-Encoding: chunked Date: Mon, 26 Sep 2005 14:02:33 GMT Server: Apache/1.3.33 
+
+--------------------
+
+ Expected c8142178b9c49dfa10db7a1bd023f4f1 but got cf85e9def676ff279cfb4219aa795385
+# 2005-09-27 00.00.02 - 194.197.161.31
+# Sid 1127770438-473 - Uid 0 - debug 1
+
+
+# 2005-09-26 23.33.58 - 194.251.240.116
+# Sid 1127770438-473 - Uid 0 - debug 1
+
+# Sid 1127770438-473 - Uid 60823 - debug 1
+
+Name: hst31.ahs.aland.fi
+Address: 194.197.161.31
+
+Name: cache-hki-7.inet.fi
+Address: 194.251.240.116
+
+Hej. Jag har sett att webbplatsen (paranormal.se) inte riktigt fungerar för dig.
+
+Lösenordet som du använder för att logga in sparas i en cookie krypterat tillsammans med din ip-adress för att undvika att någon annan använder cookien. För att använda den i krypterad form behöver de komma från samma IP.
+
+I ditt fall så loggar du in från hst31.ahs.aland.fi men senare så kommer en del requests från cache-hki-7.inet.fi som uppenbarligen är en slags proxy-cache. Men det gör att cookien inte stämmer när requesten går via den.
+
+Jag vill hitta en lösning på detta.
+
+Jag skulle uppskatta om du hjälpte mig genom att logga in igen och försöka få samma fel att hända igen.
+
+Jag har lagt in lite extra debuggdata till loggen så jag vill se vad son händer.
+
+
+Tack.

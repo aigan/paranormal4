@@ -34,6 +34,7 @@ BEGIN
     push @INC, $CFG->{'pc_root'}.'/lib';
     push @INC, $CFG->{'rb_root'}.'/lib';
     push @INC, $CFG->{'paraframe'}. "/lib";
+    push @INC, $CFG->{'email_classifier'}. '/lib';
 }
 
 use strict;
@@ -45,7 +46,6 @@ use Scalar::Util qw( looks_like_number );
 
 use Para::Frame;
 use Para::Frame::DBIx;
-use Para::Frame::Time qw();
 use Para::Frame::Email;
 use Para::Frame::Email::Address;
 use Para::Frame::Utils qw( chmod_tree );
@@ -54,17 +54,17 @@ use Para::Frame::Site;
 
 use Rit::Base;
 use Rit::Base::Constants;
-use Rit::Base::Utils qw( cache_sync cache_clear translate );
+use Rit::Base::Utils;
 use Rit::Base::Resource;
 use Rit::Base::Arc;
 use Rit::Base::Search;
 use Rit::Base::Pred;
 use Rit::Base::Rule;
-use Rit::Base::Time;
+use Rit::Base::Literal::Time;
 use Rit::Base::Site;
-use Rit::Base::User::Meta;
 
 use Para;
+use Para::User::Meta;
 
 
 {
@@ -86,7 +86,7 @@ use Para;
      alternate =>
      {
       light => [ "css/light.css" ],
-      blue => [ "css/blue.css" ],
+#      blue => [ "css/blue.css" ],
      },
      default => 'light',
     };
@@ -99,10 +99,10 @@ use Para;
 	'webhome'    => $CFG->{'site'}{'para'}{'webhome'}||'',
 	'webhost'    => $CFG->{'site'}{'para'}{'webhost'}||$CFG->{'webhost'},
 	'aliases'    => ['paranormal.se:443'],
-	'last_step'  => "/member/db/",
+#	'last_step'  => "/member/db/",
 	'backup_host'=> $CFG->{'site'}{'para'}{'backup_host'},
-	'is_compiled' => 1,
-	'loadpage'    => "/meta/loading.html",
+#	'is_compiled' => 1,
+	'loadpage'    => "/pf/loading.html",
 	'languages'       => ['sv'],
 	'params'     =>
 	{
@@ -134,7 +134,7 @@ use Para;
 #     'tt_plugins'      => 'Rit::Guides::Template::Plugin',
 
 #     'user_class'      => 'Para::Member::Meta',
-     'user_class'      => 'Rit::Base::User::Meta',
+     'user_class'      => 'Para::User::Meta',
      'session_class'   => 'Rit::Base::Session',
 #     'resource_class'  => 'Rit::Base::Resource',
      'search_collection_class' => 'Rit::Base::Search::Collection',
@@ -197,7 +197,7 @@ use Para;
     Para::Frame->add_hook('on_startup', sub
 			  {
 			      $Rit::dbix->connect;
-			      Para::Setup->setup_db;
+#			      Para::Setup->setup_db;
 			  });
 
     Para::Frame->add_hook('on_ritbase_ready', sub
@@ -205,15 +205,15 @@ use Para;
 			      Para->initialize_db;
 			  });
 
-    Para::Frame->add_hook('before_user_logout', sub
-			  {
-			      $_[0]->before_user_logout;
-			  });
-
-    Para::Frame->add_hook('user_login', sub
-			  {
-			      $_[0]->after_user_login;
-			  });
+#    Para::Frame->add_hook('before_user_logout', sub
+#			  {
+#			      $_[0]->before_user_logout;
+#			  });
+#
+#    Para::Frame->add_hook('user_login', sub
+#			  {
+#			      $_[0]->after_user_login;
+#			  });
 
     Para::Frame->add_hook('done', \&Para::on_done);
 
@@ -223,8 +223,8 @@ use Para;
 
     my $global_params =
     {
-     now             => \&Para::Frame::Time::now,
-     date            => \&Para::Frame::Time::date,
+     now             => \&Rit::Base::Literal::Time::now,
+     date            => \&Rit::Base::Literal::Time::date,
 
      favicon         => "favicon.ico",
      para            => Para->new,

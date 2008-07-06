@@ -30,6 +30,8 @@ use Para::Frame::Reload;
 use Para::Frame::Utils qw( debug paraframe_dbm_open );
 use Para::Frame::Time qw( now duration );
 
+use Rit::Base::Utils qw( parse_propargs );
+
 use Para::Setup;
 
 #use Para::Member;
@@ -114,21 +116,51 @@ sub initialize_db
 {
     debug "initialize_db";
 
-    return; ### NOTHING TO DO HERE NOW
+#    return; ### NOTHING TO DO HERE NOW
 
-    my $dbh =  $Rit::dbix->dbh;
+    if( $ARGV[0] eq 'setup_db' )
+    {
+	Para::Setup->setup_db();
+    }
+    elsif( $ARGV[0] eq 'vacuum_all' )
+    {
+	my $req = Para::Frame::Request->new_bgrequest();
+	my $start = $ARGV[1] || 99999999;
+	my $vnodes_sth = $Rit::dbix->dbh->prepare("select * from arc where active is true and ver <= $start order by ver desc");
+	$vnodes_sth->execute;
 
-    my $req = Para::Frame::Request->new_bgrequest();
-    my( $args, $arclim, $res ) = parse_propargs('auto');
+	debug sprintf "Vacuuming %d arcs", $vnodes_sth->rows;
+	my $obj_node_cnt = 0;
+	while( my $rec = $vnodes_sth->fetchrow_hashref )
+	{
+	    my $arc = Rit::Base::Arc->get_by_rec($rec);
+	    # Giving id for traceback debugging
+	    $arc->vacuum(undef,$arc->id);
 
-    my $R = Rit::Base->Resource;
-    my $P = Rit::Base->Pred;
-    my $C = Rit::Base->Constants;
+	    unless( ++$obj_node_cnt % 1000 )
+	    {
+		Rit::Base::Resource->commit;
+		$Rit::dbix->commit;
+		debug sprintf "%6d VACUUMED %d",$obj_node_cnt, $arc->id;
+	    }
+	}
+	$Para::Frame::REQ->done;
+    }
 
-    $res->autocommit;
-    $R->commit;
 
-    debug 1, "Adding/updating nodes and preds: done!";
+#    my $dbh =  $Rit::dbix->dbh;
+#
+#    my $req = Para::Frame::Request->new_bgrequest();
+#    my( $args, $arclim, $res ) = parse_propargs('auto');
+#
+#    my $R = Rit::Base->Resource;
+#    my $P = Rit::Base->Pred;
+#    my $C = Rit::Base->Constants;
+#
+#    $res->autocommit;
+#    $R->commit;
+#
+#    debug 1, "Adding/updating nodes and preds: done!";
 }
 
 ######################################################################

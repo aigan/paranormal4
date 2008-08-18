@@ -124,6 +124,11 @@ sub initialize_db
     }
     elsif( $ARGV[0] eq 'vacuum_all' )
     {
+	$Rit::Base::VACUUM_ALL = 1;
+    }
+
+    if( $Rit::Base::VACUUM_ALL )
+    {
 	my $req = Para::Frame::Request->new_bgrequest();
 	my $start = $ARGV[1] || 99999999;
 	my $vnodes_sth = $Rit::dbix->dbh->prepare("select * from arc where active is true and ver <= $start order by ver desc");

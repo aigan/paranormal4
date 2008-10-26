@@ -81,7 +81,7 @@ use Para::User::Meta;
 
     my $para_css =
     {
-     persistent => [ "pf/css/paraframe.css",
+     persistent => [ "pf/css/paraframe.css_tt",
 		     "css/default.css" ],
      alternate =>
      {
@@ -162,7 +162,7 @@ use Para::User::Meta;
 
      'css'             =>
      {
-      persistent => ["pf/css/paraframe.css",
+      persistent => ["pf/css/paraframe.css_tt",
 		     "css/rg-base.css"],
       params =>
       {
@@ -242,7 +242,9 @@ use Para::User::Meta;
     if( $ARGV[0] and not looks_like_number($ARGV[0]) )
     {
 	Para::Frame->startup;
+	Para::Frame::main_loop() if $ARGV[0] eq 'no_watchdog';
 	print "Server stops\n";
+	Para::Frame->go_down;
 	exit;
     }
 

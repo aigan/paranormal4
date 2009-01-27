@@ -208,7 +208,7 @@ sub setup_db
 		      label => 'spatial_thing',
 		      admin_comment => "The collection of all things that have a spatial extent or location relative to some other SpatialThing or in some embedding space. Note that to say that an entity is a member of this collection is to remain agnostic about two issues. First, a SpatialThing may be PartiallyTangible (e.g. Texas-State) or wholly Intangible (e.g. ArcticCircle or a line mentioned in a geometric theorem). Second, although we do insist on location relative to another spatial thing or in some embedding space, a SpatialThing might or might not be located in the actual physical universe.",
 		      cyc_id => 'SpatialThing',
-		      is => $class,
+		      scof => $individual,
 		     });
 
     my $physical_organism
@@ -429,7 +429,7 @@ sub setup_db
     # home_postal_street           - (see ContactLocation GAF Arg : 3)
     # home_postal_visiting         -
     # home_postal_city             -
-    # home_postal_code             in_region
+    # home_postal_code             in_place
     # home_postal_country          -
     # presentation                 description
     # statement                    -
@@ -1216,6 +1216,14 @@ sub setup_db
 		    cyc_id => 'PlanetEarth',
 		   });
 
+    my $sweden =
+      $R->find_set({
+		    label => 'sweden',
+		    is => $location,
+		    pc_old_topic_id => 397071,
+		    is_part_of => $planet_earth,
+		   });
+
     my $country =
       $R->find_set({
 		    label => 'loc_country',
@@ -1264,6 +1272,198 @@ sub setup_db
 		    can_be_part_of => $city,
 		   });
 
+
+
+    my %countyidx;
+  COUNTY:
+    {
+	my $countylist = $odbix->select_list('from county');
+	my( $countyrec, $countyerror ) = $countylist->get_first;
+	while(! $countyerror )
+	{
+	    my $id = sprintf "%.2d", $countyrec->{'county'};
+	    $countyidx{ $id } =
+	      $R->create({
+			  name => $countyrec->{county_name},
+			  code => $id,
+			  name_short => $countyrec->{county_code},
+			  is => $county,
+			  is_part_of => $sweden,
+			 });
+	}
+	continue
+	{
+	    ( $countyrec, $countyerror ) = $countylist->get_next;
+	}
+    }
+
+    my %cityidx;
+  CITY:
+    {
+	debug "retrieving list of all cities";
+	my $citylist = $odbix->select_list('from city');
+	my( $cityrec, $cityerror ) = $citylist->get_first;
+	while(! $cityerror )
+	{
+	    $cityidx{ $cityrec->{'city'} } =
+	      $R->create({
+			  name => ucfirst lc $cityrec->{city_name},
+			  is => $city,
+			  is_part_of => $countyidx{ $cityrec->{city_l} },
+			  geo_x => $cityrec->{city_x},
+			  geo_y => $cityrec->{city_y},
+			 });
+	}
+	continue
+	{
+	    ( $cityrec, $cityerror ) = $citylist->get_next;
+	}
+    }
+
+    my %munidx;
+#  MUNICIPALITY:
+#    {
+#	debug "retrieving list of all municipalities";
+#	my $munlist = $odbix->select_list('from municipality');
+#	my( $munrec, $munerror ) = $munlist->get_first;
+#	while(! $munerror )
+#	{
+#	    $munidx{ $munrec->{'municipality'} } =
+#	      $R->create({
+#			  name => $munrec->{municipality_name},
+#			  is => $municipality,
+#			  code => $munrec->{municipality},
+#			  is_part_of => $countyidx{ $munrec->{municipality_l} },
+#			 });
+#	}
+#	continue
+#	{
+#	    ( $munrec, $munerror ) = $munlist->get_next;
+#	}
+#    }
+
+    my %parishidx;
+#  PARISH:
+#    {
+#	debug "retrieving list of all parishes";
+#	my $parishlist = $odbix->select_list('from parish');
+#	my( $parishrec, $parisherror ) = $parishlist->get_first;
+#	while(! $parisherror )
+#	{
+#	    $parishidx{ $parishrec->{'parish'} } =
+#	      $R->create({
+#			  name => $parishrec->{parish_name},
+#			  is => $parish,
+#			  code => $parishrec->{parish},
+#			  is_part_of => $munidx{ $parishrec->{parish_lk} },
+#			 });
+#	}
+#	continue
+#	{
+#	    ( $parishrec, $parisherror ) = $parishlist->get_next;
+#	}
+#    }
+
+
+    # Now bring the official codes up to date for 2009
+    #
+    debug "Setting up LKF 2009";
+    open LKF, '<', $Para::CFG->{'pc_root'}.'/doc/lkf2009.txt' or die $!;
+    while(my $line = <LKF>)
+    {
+	chomp $line;
+	next unless $line;
+
+	utf8::decode( $line );
+	my( $key, $val ) = split /=/, $line;
+	my( $l, $k, $f ) = $key =~ /^(..)(..)?(..)?/;
+
+	if( $f )
+	{
+	    debug "F $key = $val";
+	    $parishidx{ $key } =
+	      $R->create({
+			  name => $val,
+			  is => $parish,
+			  code => $key,
+			  is_part_of =>  $munidx{ $l.$k },
+			 });
+	}
+	elsif( $k )
+	{
+	    debug "K $key = $val";
+	    $munidx{ $key } =
+	      $R->create({
+			  name => $val,
+			  is => $municipality,
+			  code => $key,
+			  is_part_of => $countyidx{ $l },
+			 });
+	}
+	elsif( $l )
+	{
+	    debug "L $key = $val";
+	    # Done above
+	}
+	else
+	{
+	    die "Could not parse key $key";
+	}
+    }
+
+
+
+
+
+
+
+
+  ZIPCODE:
+    {
+	my %trans =
+	  (
+	   1917 => '0331',
+	  );
+
+	debug "retrieving list of all zipcodes";
+	my $ziplist = $odbix->select_list('from zip');
+	my( $ziprec, $ziperror ) = $ziplist->get_first;
+	while(! $ziperror )
+	{
+	    my $zip_city = $ziprec->{zip_city};
+	    my $zip_lk = sprintf "%.4d", $ziprec->{zip_lk};
+
+	    if( $trans{$zip_lk} ){ $zip_lk = $trans{$zip_lk} };
+
+
+	    unless( $cityidx{ $zip_city } )
+	    {
+		throw "City $zip_city not found in city index";
+	    }
+
+	    unless( $munidx{ $zip_lk } )
+	    {
+		throw "Municipality $zip_lk not found in mun index";
+	    }
+
+	    $R->create({
+			is => $zipcode,
+			code => $ziprec->{zip},
+			is_part_of => [
+				       $cityidx{ $zip_city },
+				       $munidx{ $zip_lk },
+				      ],
+			geo_x => $ziprec->{zip_x},
+			geo_y => $ziprec->{zip_y},
+		       });
+	}
+	continue
+	{
+	    ( $ziprec, $ziperror ) = $ziplist->get_next;
+	}
+    }
+
+
 # TODO: Import street and address
 
 #    # ADDRESS
@@ -1272,7 +1472,7 @@ sub setup_db
 #    # address_nr_from    pc_address_nr_from
 #    # address_nr_to      pc_address_nr_to
 #    # address_step       pc_address_nr_step
-#    # address_zip        in_region
+#    # address_zip        is_part_of
 #    # address_from_x     -
 #    # address_from_y     -
 #    # address_to_x       -
@@ -1558,10 +1758,94 @@ sub setup_db
 
 
 
+######## Importing topic
+  TOPIC:
+    {
+        #  t                        pc_old_topic_id
+        #  t_pop                    -
+        #  t_size                   -
+        #  t_created                node(created)
+        #  t_createdby              node(created)
+        #  t_updated                -
+        #  t_changedby              -
+        #  t_status                 ...
+        #  t_title                  name
+        #  t_text                   description
+        #  t_entry                  ...
+        #  t_entry_parent           is_part_of
+        #  t_entry_next             ... (use weight)
+        #  t_entry_imported         -
+        #  t_file                   pc_public_path
+        #  t_class                  ...
+        #  t_ver                    -
+        #  t_replace                -
+        #  t_connected              pc_connected
+        #  t_active                 -
+        #  t_connected_status       -
+        #  t_oldfile                -
+        #  t_urlpart                url_part
+        #  t_title_short_old        -
+        #  t_title_short_plural_old -
+        #  t_comment_admin          admin_comment
+        #  t_published              -
+        #  t_title_short            name_short
+        #  t_title_short_plural     ...
+        #  t_vacuumed               -
 
+	## t_status: http://old.paranormal.se/meta/devel/entry_status.html
 
+	debug "retrieving list of all topics";
+	my $list = $odbix->select_list('from t where t_status > 1 order by t');
+	my( $rec, $error ) = $list->get_first;
+	while(! $error )
+	{
+	    my $created_by = $R->get({pc_member_id => $rec->{'t_createdby'}});
 
+	    my %prop =
+	      (
+	       pc_old_topic_id => $rec->{'t'},
+	       created => $rec->{'t_created'},
+	       created_by => $created_by,
+	       name => $rec->{'t_title'},
+	       description => $rec->{'t_text'},
+	      );
 
+	    if( my $pc_public_path = $rec->{'t_file'} )
+	    {
+		$prop{ pc_public_path } = $pc_public_path;
+	    }
+
+	    if( my $pc_connected = $rec->{'t_connected'} )
+	    {
+		$prop{ pc_connected } = $pc_connected;
+	    }
+
+	    if( my $url_part = $rec->{'t_urlpart'} )
+	    {
+		$prop{ url_part ) = $url_part;
+	    }
+
+	    if( my $admin_comment = $rec->{'t_comment_admin'} )
+	    {
+		$prop{ admin_comment } = $admin_comment;
+	    }
+
+	    if( my $title_short = $rec->{'t_title_short'} )
+	    {
+		$prop{ title_short }  = $title_short;
+	    }
+
+	    if( my $t_status = $rec->{'t_status'} )
+	    {
+	    }
+
+	    last;
+	}
+	continue
+	{
+	    ( $rec, $error ) = $list->get_next;
+	}
+    };
 
 
 
@@ -1580,24 +1864,24 @@ sub setup_db
 
 # Handled tables
 #
-#  address      | -
-#  city         | -
+#  address      | ?
+#  city         | !
 #  country      | X
-#  county       | -
+#  county       | !
 #  domain       | X
 #  event        | X
 #  history      | X
 #  intrest      | -
-#  ipfilter     | -
+#  ipfilter     | ?
 #  mailalias    | !
 #  mailr        | X
 #  media        | -
 #  member       | !
 #  memberhost   | X
 #  memo         | X
-#  municipality | -
+#  municipality | !
 #  nick         | !
-#  parish       | -
+#  parish       | !
 #  passwd       | -
 #  payment      | ?
 #  plan         | X
@@ -1610,5 +1894,5 @@ sub setup_db
 #  t            | -
 #  talias       | -
 #  ts           | -
-#  zip          | -
+#  zip          | !
 

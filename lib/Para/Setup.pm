@@ -23,6 +23,9 @@ Para::Setup
 =cut
 
 use strict;
+use warnings;
+
+use Carp qw( confess );
 
 BEGIN
 {
@@ -35,11 +38,13 @@ use DBI;
 use Carp qw( croak );
 use DateTime::Format::Pg;
 
-use Para::Frame::Utils qw( debug datadump throw validate_utf8 );
+use Para::Frame::Utils qw( debug datadump throw validate_utf8 catch );
 use Para::Frame::Time qw( now );
 
 use Rit::Base::Utils qw( valclean parse_propargs query_desig );
 use Rit::Base::Setup;
+
+our( %TOPIC, %RELTYPE, @AUTOCREATED, $R, $L, $odbix, $class, $individual, $pc_topic, $pc_entry, $pc_featured_topic, $word_plural, $information_store);
 
 sub setup_db
 {
@@ -52,9 +57,9 @@ sub setup_db
     my $dbh = $dbix->dbh;
     my $now = DateTime::Format::Pg->format_datetime(now);
 
-    my $R = Rit::Base->Resource;
+    $R = Rit::Base->Resource;
     my $C = Rit::Base->Constants;
-    my $L = Rit::Base->Literal;
+    $L = Rit::Base->Literal;
 
     my $root = $R->get_by_label('root');
 
@@ -75,7 +80,7 @@ sub setup_db
 
     debug "------------------------------------";
 
-    my $odbix = Para::Frame::DBIx->
+    $odbix = Para::Frame::DBIx->
       new({connect =>$Para::CFG->{'dbconnect_old'}});
     $odbix->connect;
     my $odbh = $odbix->dbh;
@@ -85,7 +90,7 @@ sub setup_db
     my $C_login_account     = $C->get('login_account');
     my $ia                  = $C->get('intelligent_agent');
     my $C_predicate         = $C->get('predicate');
-    my $class               = $C->get('class');
+    $class                  = $C->get('class');
     my $C_resource          = $C->get('resource');
     my $C_arc               = $C->get('arc');
 
@@ -94,8 +99,11 @@ sub setup_db
     my $C_bool  = $C->get('bool');
     my $C_date  = $C->get('date');
     my $C_url   = $C->get('url');
+    my $C_file   = $C->get('file');
+    my $C_website_url   = $C->get('website_url');
     my $C_email_address = $C->get('email_address');
     my $C_text  = $C->get('text');
+    my $C_term  = $C->get('term');
     my $C_phone_number = $C->get('phone_number');
     my $C_language = $C->get('language');
     my $C_password = $C->get('password');
@@ -112,43 +120,41 @@ sub setup_db
 
 
 
-    my $pc_old_topic_id =
-      $R->find_set({
-		    label => 'pc_old_topic_id',
-		    is => $C_predicate,
-		    range => $C_int,
-		    admin_comment => "Old t.t",
-		   });
+    $R->find_set({
+		  label => 'pc_old_topic_id',
+		  is => $C_predicate,
+		  range => $C_int,
+		  admin_comment => "Old t.t",
+		 });
 
     $pc->add({pc_old_topic_id => 32574});
 
 
-    my $individual
+    $individual
       = $R->find_set({
 		      label => 'individual',
 		      admin_comment => "Individual is the collection of all individuals: things that are not sets or collections. Individuals might be concrete or abstract, and include (among other things) physical objects, events, numbers, relations, and groups.",
 		      is => $class,
 		     });
 
-    my $pc_old_arctype_id =
-      $R->find_set({
-		    label => 'pc_old_arctype_id',
-		    is => $C_predicate,
-		    domain => $C_predicate,
-		    range => $C_int,
-		    admin_comment => "Old reltype.reltype",
-		   });
+    $R->find_set({
+		  label => 'pc_old_arctype_id',
+		  is => $C_predicate,
+		  domain => $C_predicate,
+		  range => $C_int,
+		  admin_comment => "Old reltype.reltype",
+		 });
 
-    my $name_rev =
-      $R->find_set({
-		    label => 'name_rev',
-		    is => $C_predicate,
-		    domain => $C_predicate,
-		    range => $C_text,
-		    admin_comment => "Old reltype.rev_name",
-		   });
+    $R->find_set({
+		  label => 'name_rev',
+		  is => $C_predicate,
+		  domain => $C_predicate,
+		  range => $C_text,
+		  admin_comment => "Old reltype.rev_name",
+		 });
 
 
+    $class->add({pc_old_topic_id => 9});
 
 
 
@@ -157,6 +163,119 @@ sub setup_db
     #
     # pct is used as a prefix: paranormal creation topic
 
+    my $spatial_thing
+      = $R->find_set({
+		      label => 'spatial_thing',
+		      admin_comment => "The collection of all things that have a spatial extent or location relative to some other SpatialThing or in some embedding space. Note that to say that an entity is a member of this collection is to remain agnostic about two issues. First, a SpatialThing may be PartiallyTangible (e.g. Texas-State) or wholly Intangible (e.g. ArcticCircle or a line mentioned in a geometric theorem). Second, although we do insist on location relative to another spatial thing or in some embedding space, a SpatialThing might or might not be located in the actual physical universe.",
+		      has_cyc_id => 'SpatialThing',
+		      scof => $individual,
+		     });
+
+    my $temporal_thing
+      = $R->find_set({
+		      label => 'temporal_thing',
+		      admin_comment => "This is the collection of all things that have temporal extent or location -- things about which one might sensibly ask 'When?'. TemporalThing thus contains many kinds of things, including events, physical objects, agreements, and pure intervals of time.",
+		      has_cyc_id => 'TemporalThing',
+		      scof => $individual,
+		     });
+
+    my $temporal_stuff_type
+      = $R->find_set({
+		      label => 'temporal_stuff_type',
+		      admin_comment => "Temporal Thing class",
+		      has_cyc_id => 'TemporalStuffType',
+		      is => $class,
+		     });
+
+    $information_store
+      = $R->find_set({
+		      label => 'information_store',
+		      admin_comment => "Each instance of InformationStore is a tangible or intangible, concrete or abstract repository of information. The information stored in an information store is stored there as a consequence of the actions of one or more agents.",
+		      has_cyc_id => 'InformationStore',
+		      is => $temporal_stuff_type,
+		      scof => $individual,
+		      pc_old_topic_id => 4463,
+		     });
+    my $ais
+      = $R->find_set({
+		      label => 'ais',
+		      admin_comment => "AspatialInformationStore is the collection of all information stores that have no spatial location. Specializations of AspatialInformationStore include ConceptualWork, Microtheory, AbstractInformationStructure, and FieldOfStudy.",
+		      has_cyc_id => 'AspatialInformationStore',
+		      scof => $information_store,
+		     });
+
+    my $field_of_study
+      = $R->find_set({
+		      label => 'field_of_study',
+		      admin_comment => "Each instance of FieldOfStudy is a particular area of study, with its own distinctive set of theories, hypotheses, and problems.",
+		      has_cyc_id => 'FieldOfStudy',
+		      scof => $ais,
+		      pc_old_topic_id => 3719,
+		     });
+
+
+
+
+    # See also FieldOfStudy, BeliefSystem, Dream, Meme
+
+    my $pit
+      = $R->find_set({
+		      label => 'pit',
+		      admin_comment => "Each instance of PropositionalInformationThing (or \"PIT\") is an abstract object -- a chunk of information consisting of one or more propositions. The propositional content of a PIT is not essentially encoded in any particular language, and it may be representable in many languages. PITs are used to represent the informational contents of InformationBearingThings.",
+		      has_cyc_id => 'PropositionalInformationThing',
+		      scof => $ais,
+		     });
+
+    # See also MentalInformation, SensoryInformation, Memory,
+    # BeliefSystem, PhilosophicalTheory
+
+    my $ibt
+      = $R->find_set({
+		      label => 'ibt',
+		      admin_comment => "InformationBearingThing: A collection of spatially-localized individuals, including various actions and events as well as physical objects. Each instance of InformationBearingThing (or \"IBT\") is an item that contains information (for an agent who knows how to interpret it). Examples: a copy of the novel Moby Dick; a photograph. It is important to distinguish the various specializations of InformationBearingThing from those of AspatialInformationStore (whose instances are the chunks of information instantiated in particular IBTs.",
+		      has_cyc_id => 'InformationBearingThing',
+		      scof => $information_store,
+		      is => $temporal_stuff_type,
+		     });
+
+    my $media
+      = $R->find_set({
+		      label => 'media',
+		      admin_comment => "Each instance of MediaProduct is an information store created for the purposes of media distribution (see MediaTransferEvent). Specializations of MediaProduct include RecordedVideoProduct, MediaSeriesProduct, WorldWideWebSite and NewsArticle.",
+		      scof => [ $information_store, $temporal_thing],
+		      has_cyc_id => 'MediaProduct',
+		     });
+
+    my $cw
+      = $R->find_set({
+		      label => 'cw',
+		      admin_comment => "ConceptualWork: A specialization of AspatialInformationStore. Each instance of ConceptualWork is a partially abstract work (in the sense that each instance has a beginning in time, but lacks a location in space) which either has an associated AbstractInformationStructure (q.v.) or has a version with an associated AbstractInformationStructure. Conceptual works or versions of conceptual works can be instantiated in instances of InformationBearingThing (q.v.); every such instantiation of a conceptual work will also be an instantiation of an instance of AbstractInformationStructure. Notable specializations of ConceptualWork include ComputerProgram-CW, VisualWork, and Book-CW.",
+		      scof => $ais,
+		      has_cyc_id => 'ConceptualWork',
+		     });
+    # See also possessesCopyOf, instantiationOfWork, instantiationOfAIT
+    # !!! ibt instantiationOfWork cw
+    # !!! ibt instantiationOfAIT ais
+    # !!! ibt instantiationOfAIS AbstractInformationStructure
+    # !!! ibt pitOfIBT pit
+    # !!! ibt containsInfoPropositional-IBT pit
+    # !!! cw containsInfoStructure-CW ais
+    # !!! cw partialInfoStructureOfCW AbstractStructure
+    # !!! pcw topicOfPCW Thing
+    # !!! Collection topicOf Thing
+
+
+###########################################
+
+    my $all_abbstract
+      = $R->find_set({
+		      label => 'all_abstract',
+		      is => $spatial_thing,
+		      is => $temporal_thing,
+		      admin_comment => 'The thing that contains the physical universe and all other abstract planes of existence',
+		      pc_old_topic_id => 75908,
+		     });
+
     my $psychological_phenomenon
       = $R->find_set({
 		      label => 'pct_psychological_phenomenon',
@@ -164,14 +283,12 @@ sub setup_db
 		      pc_old_topic_id => 3318,
 		     });
 
-    debug "---------------> HERE";
-
-
      my $thought
       = $R->find_set({
 		      label => 'pct_thought',
 		      scof => $psychological_phenomenon,
 		      pc_old_topic_id => 148549,
+		      has_wikipedia_id => 'Thought',
 		     });
 
     my $perspective
@@ -180,119 +297,114 @@ sub setup_db
 		      scof => $thought,
 		     });
 
-    my $information_store
-      = $R->find_set({
-		      label => 'information_store',
-		      admin_comment => "Each instance of InformationStore is a tangible or intangible, concrete or abstract repository of information.",
-		      cyc_id => 'InformationStore',
-		      scof => $individual,
-		     });
-    my $media
-      = $R->find_set({
-		      label => 'media',
-		      admin_comment => "Each instance of MediaProduct is an information store created for the purposes of media distribution (see MediaTransferEvent). Specializations of MediaProduct include RecordedVideoProduct, MediaSeriesProduct, WorldWideWebSite and NewsArticle.",
-		      scof => $individual,
-		      cyc_id => 'MediaProduct',
-		      pc_old_topic_id => 4463,
-		     });
-    my $ais
-      = $R->find_set({
-		      label => 'ais',
-		      admin_comment => "AspatialInformationStore is the collection of all information stores that have no spatial location. Specializations of AspatialInformationStore include ConceptualWork, Microtheory, AbstractInformationStructure, and FieldOfStudy.",
-		      cyc_id => 'AspatialInformationStore',
-		      scof => $media,
-		     });
-
-    my $spatial_thing
-      = $R->find_set({
-		      label => 'spatial_thing',
-		      admin_comment => "The collection of all things that have a spatial extent or location relative to some other SpatialThing or in some embedding space. Note that to say that an entity is a member of this collection is to remain agnostic about two issues. First, a SpatialThing may be PartiallyTangible (e.g. Texas-State) or wholly Intangible (e.g. ArcticCircle or a line mentioned in a geometric theorem). Second, although we do insist on location relative to another spatial thing or in some embedding space, a SpatialThing might or might not be located in the actual physical universe.",
-		      cyc_id => 'SpatialThing',
-		      scof => $individual,
-		     });
-
     my $physical_organism
       = $R->find_set({
 		      label => 'physical_organism',
 		      admin_comment => "Physical life form",
 		      scof => $spatial_thing,
-		      cyc_id => 'Organism-Whole',
+		      has_cyc_id => 'Organism-Whole',
 		      pc_old_topic_id => 9052,
 		     });
 
-    my $person
-      = $R->find_set({
-		      label => 'person',
-		      admin_comment => "An individual intelligent agent",
-		      scof => [$ia, $physical_organism],
-		      cyc_id => 'Person',
-		      pc_old_topic_id => 2140,
-		     });
-
-    my $mia
-      = $R->find_set({
-		      label => 'mia',
-		      admin_comment => "MultiIndividualAgent. A type of Agent-Generic that may or may not be intelligent. Usually constitutes some type of group, such as a LegalCorporation, CrowdOfPeople or Organization",
-		      cyc_id => 'MultiIndividualAgent',
-		      pc_old_topic_id => 143,
-		      is => $class,
-		     });
-
-    my $product
-      = $R->find_set({
-		      label => 'product',
-		      admin_comment => "Each instance of Product is a TemporalThing that is, or was at one time, offered for sale or performed as a commercial service, or was produced with the intent of being offered for sale.",
-		      cyc_id => 'Product',
-		      pc_old_topic_id => 422155,
-		      scof => $individual,
-		     });
-
-    my $book_cw
-      = $R->find_set({
-		      label => 'book_cw',
-		      admin_comment => "Each instance of Book-CW is an abstract work intended to be instantiated as a book of some sort. Instances of Book-CW may be intended to be instantiated in any book format: hardcopy (see BookCopy), electronic, audio tape, etc.",
-		      scof => $ais,
-		      cyc_id => 'Book-CW',
-		      pc_old_topic_id => 443,
-		     });
-
-    my $temporal_thing
-      = $R->find_set({
-		      label => 'temporal_thing',
-		      admin_comment => "This is the collection of all things that have temporal extent or location -- things about which one might sensibly ask 'When?'. TemporalThing thus contains many kinds of things, including events, physical objects, agreements, and pure intervals of time.",
-		      cyc_id => 'TemporalThing',
-		      is => $class,
-		     });
-
-    my $temporal_thing_class
-      = $R->find_set({
-		      label => 'pct_temporal_thing_class',
-		      admin_comment => "Temporal Thing Type",
-		      is => $class,
-		     });
-
-    my $license
-      = $R->find_set({
-		      label => 'license',
-		      admin_comment => "Each element of License-LegalAgreement is a credential issued by a granting authority and recorded in some tangible document (see License-IBO), which authorizes the agent to whom it is issued to perform actions of a certain kind.",
-		      cyc_id => 'License-LegalAgreement',
-		      pc_old_topic_id => 144544,
-		      scof => $media,
-		     });
+    $ia->add({scof => $information_store });
 
     my $legal_agent
       = $R->find_set({
 		      label => 'legal_agent',
 		      admin_comment => "Each instance of LegalAgent is an agent who has some status in a particular legal system. At the very least, such an agent is recognized by some legal authority as having some kinds of rights and/or responsibilities as an agent (e.g., citizens of Germany), or as being subject to certain restrictions and penalties (e.g., a company that has been blacklisted by Iraq).",
 		      scof => $ia,
-		      cyc_id => 'LegalAgent',
+		      has_cyc_id => 'LegalAgent',
+		     });
+
+    my $person
+      = $R->find_set({
+		      label => 'person',
+		      admin_comment => "An individual intelligent agent",
+		      scof => [$legal_agent, $physical_organism],
+		      has_cyc_id => 'Person',
+		      pc_old_topic_id => 2140,
+		      has_wikipedia_id => 'Person',
+		     });
+
+    my $agent_generic
+      = $R->find_set({
+		      label => 'agent_generic',
+		      admin_comment => "Each instance of Agent-Generic is a being that has desires or intentions, and the ability to act on those desires or intentions. Instances of Agent-Generic may be individuals (see the specialization IndividualAgent) or they may consist of several Agent-Generics operating together (see the specialization MultiIndividualAgent).",
+		      has_cyc_id => 'Agent-Generic',
+		      is => $class,
+		     });
+
+    my $mia
+      = $R->find_set({
+		      label => 'mia',
+		      admin_comment => "MultiIndividualAgent. A type of Agent-Generic that may or may not be intelligent. Usually constitutes some type of group, such as a LegalCorporation, CrowdOfPeople or Organization",
+		      has_cyc_id => 'MultiIndividualAgent',
+		      pc_old_topic_id => 143,
+		      scof => $agent_generic,
+		     });
+
+    my $organization
+      = $R->find_set({
+		      label => 'organization',
+		      admin_comment => "The collection of groups of IntelligentAgents whose members operate together to form a kind of collective. Groups of this sort satisfy the minimal condition for intelligent agency, viz., they are capable of acting purposefully",
+		      has_cyc_id => 'Organization',
+		      pc_old_topic_id => 696050,
+		      scof => [$mia, $ia],
+		     });
+
+    $pc->add({is=>$organization}); # Paranormal Sweden is a Multi-individual agent
+
+    my $legal_corporation
+      = $R->find_set({
+		      label => 'legal_corporation',
+		      admin_comment => "The collection of all Organizations which have been incorporated in accordance with the laws of a jurisdiction. Each instance of LegalCorporation is a legal entity distinct from its owners and employees, and is afforded certain powers both by law and by its incorporating documents.",
+		      has_cyc_id => 'LegalCorporation',
+		      pc_old_topic_id => 499235,
+		      scof => [$organization, $legal_agent],
+		     });
+
+    my $product
+      = $R->find_set({
+		      label => 'product',
+		      admin_comment => "Each instance of Product is a TemporalThing that is, or was at one time, offered for sale or performed as a commercial service, or was produced with the intent of being offered for sale.",
+		      has_cyc_id => 'Product',
+		      pc_old_topic_id => 422155,
+		      scof => $individual,
+		      has_wikipedia_id => 'Product_(business)',
+		     });
+
+    my $service_product
+      = $R->find_set({
+		      label => 'service_product',
+		      admin_comment => "The collection of all ServiceEvents for which payment is made.",
+		      has_cyc_id => 'ServiceProduct',
+		      scof => $product,
+		     });
+
+    my $book_cw
+      = $R->find_set({
+		      label => 'book_cw',
+		      admin_comment => "Each instance of Book-CW is an abstract work intended to be instantiated as a book of some sort. Instances of Book-CW may be intended to be instantiated in any book format: hardcopy (see BookCopy), electronic, audio tape, etc.",
+		      scof => $cw,
+		      has_cyc_id => 'Book-CW',
+		      pc_old_topic_id => 443,
+		     });
+
+    my $license
+      = $R->find_set({
+		      label => 'license',
+		      admin_comment => "Each element of License-LegalAgreement is a credential issued by a granting authority and recorded in some tangible document (see License-IBO), which authorizes the agent to whom it is issued to perform actions of a certain kind.",
+		      has_cyc_id => 'License-LegalAgreement',
+		      pc_old_topic_id => 144544,
+		      scof => $cw,
+		      has_wikipedia_id => 'License',
 		     });
 
     my $permission_ibt
       = $R->find_set({
 		      label => 'permission_ibt',
 		      admin_comment => "The InformationBearingThing that holds the persmission",
-		      scof => $media,
+		      scof => $ibt,
 		      pc_old_topic_id => 387092,
 		     });
 
@@ -309,7 +421,7 @@ sub setup_db
 		      label => 'pct_practisable',
 		      admin_comment => "Stuff that an IntelligentAgent can be involved in or use (IntelligentAgentActivity), like therapies, religions or skills",
 		      pc_old_topic_id => 11,
-		      is => $class,
+		      scof => $ais,
 		     });
 
     my $experiencable
@@ -320,12 +432,12 @@ sub setup_db
 		      is => $class,
 		     });
 
-    my $person_class
-      = $R->find_set({
-		      label => 'pct_person_class',
-		      admin_comment => "PersonType",
-		      scof => $class,
-		     });
+#    my $person_type
+#      = $R->find_set({
+#		      label => 'pct_person_type',
+#		      admin_comment => "PersonType",
+#		      scof => $class,
+#		     });
 
 
     my $location
@@ -334,7 +446,8 @@ sub setup_db
 		      admin_comment => "Each instance of Place is a spatial thing which has a relatively permanent location.",
 		      scof => $spatial_thing,
 		      pc_old_topic_id => 3322,
-		      cyc_id => 'Place',
+		      has_cyc_id => 'Place',
+		      has_wikipedia_id => 'Location_(geography)',
 		     });
 
     my $gtin
@@ -342,7 +455,12 @@ sub setup_db
 		      label => 'gtin',
 		      admin_comment => "Global Trade Identification Number. Includes ISBN, ISSN and other barcode standards. http://www.gtin.info/",
 		      scof => $C_text,
+		      has_wikipedia_id => 'Global_Trade_Item_Number',
 		     });
+
+    $C->get('swedish')->add({pc_old_topic_id => 359});
+    $C->get('english')->add({pc_old_topic_id => 396598});
+
 
 
 
@@ -459,11 +577,11 @@ sub setup_db
 		    label => 'virtual_address',
 		    scof => $C_text,
 		    admin_comment => "Similar to Cycs Computer network contact address. The collection of unique ID strings that are used as addresses on a computer network. This includes e-mail addresses, URLs, ICQ addresses, and so on. (But we also include telephone addresses)",
-		    cyc_id => 'ComputerNetworkContactAddress',
+		    has_cyc_id => 'ComputerNetworkContactAddress',
 		   });
 
     $C_email_address->update({scof => $virtual_address});
-    $C->get('file')->update({scof => $virtual_address});
+    $C_file->update({scof => $virtual_address});
     $C_url->update({scof => $virtual_address});
     $C_phone_number->update({scof => $virtual_address});
 
@@ -508,212 +626,189 @@ sub setup_db
 ######################
 
 
-    my $pc_member_id =
-      $R->find_set({
-		    label => 'pc_member_id',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.member",
-		   });
+    $R->find_set({
+		  label => 'pc_member_id',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.member",
+		 });
 
 
-    my $pc_member_level =
-      $R->find_set({
-		    label => 'pc_member_level',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.member_level",
-		   });
+    $R->find_set({
+		  label => 'pc_member_level',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.member_level",
+		 });
 
-    my $pc_latest_in =
-      $R->find_set({
-		    label => 'pc_latest_in',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_date,
-		    admin_comment => "Old member.latest_in",
-		   });
+    $R->find_set({
+		  label => 'pc_latest_in',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_date,
+		  admin_comment => "Old member.latest_in",
+		 });
 
-    my $pc_latest_out =
-      $R->find_set({
-		    label => 'pc_latest_out',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_date,
-		    admin_comment => "Old member.latest_out",
-		   });
+    $R->find_set({
+		  label => 'pc_latest_out',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_date,
+		  admin_comment => "Old member.latest_out",
+		 });
 
-    my $pc_latest_host =
-      $R->find_set({
-		    label => 'pc_latest_host',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_url,
-		    admin_comment => "Old member.latest_host",
-		   });
+    $R->find_set({
+		  label => 'pc_latest_host',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_url,
+		  admin_comment => "Old member.latest_host",
+		 });
 
-    my $has_virtual_address =
-      $R->find_set({
-		    label => 'has_virtual_address',
-		    is => $C_predicate,
-		    domain => $ia,
-		    range => $virtual_address,
-		   });
+    $R->find_set({
+		  label => 'has_virtual_address',
+		  is => $C_predicate,
+		  domain => $ia,
+		  range => $virtual_address,
+		 });
 
-    my $sys_username =
-      $R->find_set({
-		    label => 'sys_username',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_text,
-		    admin_comment => "Old member.sys_uid",
-		   });
+    $R->find_set({
+		  label => 'sys_username',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_text,
+		  admin_comment => "Old member.sys_uid",
+		 });
 
-    my $pc_sys_logging =
-      $R->find_set({
-		    label => 'pc_sys_logging',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.sys_logging",
-		   });
+    $R->find_set({
+		  label => 'pc_sys_logging',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.sys_logging",
+		 });
 
-    my $pc_present_contact =
-      $R->find_set({
-		    label => 'pc_present_contact',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.present_contact",
-		   });
+    $R->find_set({
+		  label => 'pc_present_contact',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.present_contact",
+		 });
 
-    my $pc_present_activity =
-      $R->find_set({
-		    label => 'pc_present_activity',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.present_activity",
-		   });
+    $R->find_set({
+		  label => 'pc_present_activity',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.present_activity",
+		 });
 
-    my $pc_member_general_belief =
-      $R->find_set({
-		    label => 'pc_member_general_belief',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.general_belief",
-		   });
+    $R->find_set({
+		  label => 'pc_member_general_belief',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.general_belief",
+		 });
 
-    my $pc_member_general_theory =
-      $R->find_set({
-		    label => 'pc_member_general_theory',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.general_theory",
-		   });
+    $R->find_set({
+		  label => 'pc_member_general_theory',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.general_theory",
+		 });
 
-    my $pc_member_general_practice =
-      $R->find_set({
-		    label => 'pc_member_general_practice',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.general_practice",
-		   });
+    $R->find_set({
+		  label => 'pc_member_general_practice',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.general_practice",
+		 });
 
-    my $pc_member_general_editor =
-      $R->find_set({
-		    label => 'pc_member_general_editor',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.general_editor",
-		   });
+    $R->find_set({
+		  label => 'pc_member_general_editor',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.general_editor",
+		 });
 
-    my $pc_member_general_helper =
-      $R->find_set({
-		    label => 'pc_member_general_helper',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.general_helper",
-		   });
+    $R->find_set({
+		  label => 'pc_member_general_helper',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.general_helper",
+		 });
 
-    my $pc_member_general_meeter =
-      $R->find_set({
-		    label => 'pc_member_general_meeter',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.general_meeter",
-		   });
+    $R->find_set({
+		  label => 'pc_member_general_meeter',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.general_meeter",
+		 });
 
-    my $pc_member_general_bookmark =
-      $R->find_set({
-		    label => 'pc_member_general_bookmark',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.general_bookmark",
-		   });
+    $R->find_set({
+		  label => 'pc_member_general_bookmark',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.general_bookmark",
+		 });
 
-    my $pc_member_general_discussion =
-      $R->find_set({
-		    label => 'pc_member_general_discussion',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.general_discussion",
-		   });
+    $R->find_set({
+		  label => 'pc_member_general_discussion',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.general_discussion",
+		 });
 
-    my $pc_chat_nick =
-      $R->find_set({
-		    label => 'pc_chat_nick',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_text,
-		    admin_comment => "Old member.chat_nick",
-		   });
+    $R->find_set({
+		  label => 'pc_chat_nick',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_text,
+		  admin_comment => "Old member.chat_nick",
+		 });
 
-    my $pc_member_newsmail_level =
-      $R->find_set({
-		    label => 'pc_member_newsmail_level',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.newsmail",
-		   });
+    $R->find_set({
+		  label => 'pc_member_newsmail_level',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.newsmail",
+		 });
 
-    my $pc_member_show_complexity_level =
-      $R->find_set({
-		    label => 'pc_member_show_complexity_level',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.show_complexity",
-		   });
+    $R->find_set({
+		  label => 'pc_member_show_complexity_level',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.show_complexity",
+		 });
 
-    my $pc_member_show_detail_level =
-      $R->find_set({
-		    label => 'pc_member_show_detail_level',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.show_detail",
-		   });
+    $R->find_set({
+		  label => 'pc_member_show_detail_level',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.show_detail",
+		 });
 
-    my $pc_member_show_edit_level =
-      $R->find_set({
-		    label => 'pc_member_show_edit_level',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.show_edit",
-		   });
+    $R->find_set({
+		  label => 'pc_member_show_edit_level',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.show_edit",
+		 });
 
     my $pc_website_style =
       $R->find_set({
@@ -722,14 +817,13 @@ sub setup_db
 		    admin_comment => "Collection of css styles",
 		   });
 
-    my $pc_show_style =
-      $R->find_set({
-		    label => 'pc_show_style',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $pc_website_style,
-		    admin_comment => "Old member.show_style",
-		   });
+    $R->find_set({
+		  label => 'pc_show_style',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $pc_website_style,
+		  admin_comment => "Old member.show_style",
+		 });
 
     my $style_blue =
       $R->find_set({
@@ -743,152 +837,133 @@ sub setup_db
 		    is => $pc_website_style,
 		   });
 
-    my $name_given =
-      $R->find_set({
-		    label => 'name_given',
-		    is => $C_predicate,
-		    domain => $person,
-		    range => $C_text,
-		    admin_comment => "Old member.name_given. See cyc_id HumanGivenName",
-		   });
+    $R->find_set({
+		  label => 'name_given',
+		  is => $C_predicate,
+		  domain => $person,
+		  range => $C_text,
+		  admin_comment => "Old member.name_given. See cyc_id HumanGivenName",
+		 });
 
-    my $name_middle =
-      $R->find_set({
-		    label => 'name_middle',
-		    is => $C_predicate,
-		    domain => $person,
-		    range => $C_text,
-		    admin_comment => "Old member.name_middle",
-		   });
+    $R->find_set({
+		  label => 'name_middle',
+		  is => $C_predicate,
+		  domain => $person,
+		  range => $C_text,
+		  admin_comment => "Old member.name_middle",
+		 });
 
-    my $name_family =
-      $R->find_set({
-		    label => 'name_family',
-		    is => $C_predicate,
-		    domain => $person,
-		    range => $C_text,
-		    admin_comment => "Old member.name_family. See cyc_id HumanGivenName",
-		   });
+    $R->find_set({
+		  label => 'name_family',
+		  is => $C_predicate,
+		  domain => $person,
+		  range => $C_text,
+		  admin_comment => "Old member.name_family. See cyc_id HumanGivenName",
+		 });
 
+    $R->find_set({
+		  label => 'pc_bdate_year',
+		  is => $C_predicate,
+		  domain => $person,
+		  range => $C_int,
+		  admin_comment => "Old member.bdate_ymd_year. Year of birth",
+		 });
 
-    my $pc_bdate_year =
-      $R->find_set({
-		    label => 'pc_bdate_year',
-		    is => $C_predicate,
-		    domain => $person,
-		    range => $C_int,
-		    admin_comment => "Old member.bdate_ymd_year. Year of birth",
-		   });
+    $R->find_set({
+		  label => 'geo_x',
+		  is => $C_predicate,
+		  domain => $spatial_thing,
+		  range => $C_float,
+		  admin_comment => "Latitude",
+		 });
 
+    $R->find_set({
+		  label => 'geo_y',
+		  is => $C_predicate,
+		  domain => $spatial_thing,
+		  range => $C_float,
+		  admin_comment => "Longitude",
+		 });
 
-    my $geo_x =
-      $R->find_set({
-		    label => 'geo_x',
-		    is => $C_predicate,
-		    domain => $spatial_thing,
-		    range => $C_float,
-		    admin_comment => "Latitude",
-		   });
+    $R->find_set({
+		  label => 'pc_member_present_interests',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.present_intrests",
+		 });
 
-    my $geo_y =
-      $R->find_set({
-		    label => 'geo_y',
-		    is => $C_predicate,
-		    domain => $spatial_thing,
-		    range => $C_float,
-		    admin_comment => "Longitude",
-		   });
+    $R->find_set({
+		  label => 'pc_member_payment_period_length',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.member_payment_period_length",
+		 });
 
-    my $pc_member_present_interests =
-      $R->find_set({
-		    label => 'pc_member_present_interests',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.present_intrests",
-		   });
+    $R->find_set({
+		  label => 'pc_member_payment_period_expire',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_date,
+		  admin_comment => "Old member.member_payment_period_expire",
+		 });
 
+    $R->find_set({
+		  label => 'pc_member_payment_period_cost',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.member_payment_period_cost",
+		 });
 
-    my $pc_member_payment_period_length =
-      $R->find_set({
-		    label => 'pc_member_payment_period_length',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.member_payment_period_length",
-		   });
+    $R->find_set({
+		  label => 'pc_member_payment_total',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.member_payment_total",
+		 });
 
-    my $pc_member_payment_period_expire =
-      $R->find_set({
-		    label => 'pc_member_payment_period_expire',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_date,
-		    admin_comment => "Old member.member_payment_period_expire",
-		   });
+    $R->find_set({
+		  label => 'pc_member_chat_level',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.chat_level",
+		 });
 
-    my $pc_member_payment_period_cost =
-      $R->find_set({
-		    label => 'pc_member_payment_period_cost',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.member_payment_period_cost",
-		   });
+    $R->find_set({
+		  label => 'pc_member_present_contact_public',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.present_contact_public",
+		 });
 
-    my $pc_member_payment_total =
-      $R->find_set({
-		    label => 'pc_member_payment_total',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.member_payment_total",
-		   });
+    $R->find_set({
+		  label => 'pc_member_show_level',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.show_level",
+		 });
 
-    my $pc_member_chat_level =
-      $R->find_set({
-		    label => 'pc_member_chat_level',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.chat_level",
-		   });
+    $R->find_set({
+		  label => 'pc_member_present_gifts',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.present_gifts",
+		 });
 
-    my $pc_member_present_contact_public =
-      $R->find_set({
-		    label => 'pc_member_present_contact_public',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.present_contact_public",
-		   });
-
-    my $pc_member_show_level =
-      $R->find_set({
-		    label => 'pc_member_show_level',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.show_level",
-		   });
-
-    my $pc_member_present_gifts =
-      $R->find_set({
-		    label => 'pc_member_present_gifts',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.present_gifts",
-		   });
-
-    my $pc_member_present_blog =
-      $R->find_set({
-		    label => 'pc_member_present_blog',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_int,
-		    admin_comment => "Old member.present_blog",
-		   });
+    $R->find_set({
+		  label => 'pc_member_present_blog',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_int,
+		  admin_comment => "Old member.present_blog",
+		 });
 
 
 
@@ -897,7 +972,7 @@ sub setup_db
       $R->find_set({
 		    label => 'person_type_by_culture',
 		    admin_comment => "A collection of collections. Each instance of PersonTypeByCulture is the collection of all and only those persons who participate (see cultureParticipants) in some particular human culture. Examples include FrenchPerson and EthnicGroupOfAustralianAborigines.",
-		    cyc_id => 'PersonTypeByCulture',
+		    has_cyc_id => 'PersonTypeByCulture',
 		    is => $class,
 		   });
 
@@ -906,7 +981,7 @@ sub setup_db
 		    label => 'person_type_by_gender',
 		    admin_comment => "Each instance of PersonTypeByGender is the collection of all Persons of a particular gender, understood as a set of attitudes, beliefs, and behaviors (and not strictly a matter of one's biological sex).",
 		    scof => $person_type_by_culture,
-		    cyc_id => 'PersonTypeByGender',
+		    has_cyc_id => 'PersonTypeByGender',
 		    pc_old_topic_id => 184438,
 		   });
 
@@ -915,7 +990,7 @@ sub setup_db
 		    label => 'masculine_person',
 		    admin_comment => "A PersonTypeByGender (q.v.). MasculinePerson is the collection of all Persons of masculine gender. Note that a human MasculinePerson is typically, but not necessarily, a MaleHuman (c.f.).",
 		    scof => $person,
-		    cyc_id => 'MasculinePerson',
+		    has_cyc_id => 'MasculinePerson',
 		   });
 
     my $femenine_person =
@@ -923,7 +998,7 @@ sub setup_db
 		    label => 'femenine_person',
 		    admin_comment => "A PersonTypeByGender (q.v.). FemininePerson is the collection of all Persons of feminine gender. Note that a human FemininePerson is typically, but not necessarily, a FemaleHuman (c.f.).",
 		    scof => $person,
-		    cyc_id => 'FemininePerson',
+		    has_cyc_id => 'FemininePerson',
 		   });
 
 
@@ -950,113 +1025,101 @@ sub setup_db
     # intrest_connected   pci_connected on interested_in arc
     # intrest             interested_in
 
-    my $pci_belief =
-      $R->find_set({
-		    label => 'pci_belief',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $believable,
-		    admin_comment => "Old intrest.belief",
-		   });
+    $R->find_set({
+		  label => 'pci_belief',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $believable,
+		  admin_comment => "Old intrest.belief",
+		 });
 
-    my $pci_knowledge =
-      $R->find_set({
-		    label => 'pci_knowledge',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_resource,
-		    admin_comment => "Old intrest.knowledge",
-		   });
+    $R->find_set({
+		  label => 'pci_knowledge',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_resource,
+		  admin_comment => "Old intrest.knowledge",
+		 });
 
-    my $pci_theory =
-      $R->find_set({
-		    label => 'pci_theory',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_resource,
-		    admin_comment => "Old intrest.theory",
-		   });
+    $R->find_set({
+		  label => 'pci_theory',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_resource,
+		  admin_comment => "Old intrest.theory",
+		 });
 
-    my $pci_skill =
-      $R->find_set({
-		    label => 'pci_skill',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $practisable,
-		    admin_comment => "Old intrest.skill",
-		   });
+    $R->find_set({
+		  label => 'pci_skill',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $practisable,
+		  admin_comment => "Old intrest.skill",
+		 });
 
-    my $pci_practice =
-      $R->find_set({
-		    label => 'pci_practice',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $practisable,
-		    admin_comment => "Old intrest.practice",
-		   });
+    $R->find_set({
+		  label => 'pci_practice',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $practisable,
+		  admin_comment => "Old intrest.practice",
+		 });
 
-    my $pci_editor =
-      $R->find_set({
-		    label => 'pci_editor',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_resource,
-		    admin_comment => "Old intrest.editor",
-		   });
+    $R->find_set({
+		  label => 'pci_editor',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_resource,
+		  admin_comment => "Old intrest.editor",
+		 });
 
-    my $pci_helper =
-      $R->find_set({
-		    label => 'pci_helper',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_resource,
-		    admin_comment => "Old intrest.helper",
-		   });
+    $R->find_set({
+		  label => 'pci_helper',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_resource,
+		  admin_comment => "Old intrest.helper",
+		 });
 
-    my $pci_meeter =
-      $R->find_set({
-		    label => 'pci_meeter',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_resource,
-		    admin_comment => "Old intrest.meeter",
-		   });
+    $R->find_set({
+		  label => 'pci_meeter',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_resource,
+		  admin_comment => "Old intrest.meeter",
+		 });
 
-    my $pci_bookmark =
-      $R->find_set({
-		    label => 'pci_bookmark',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $C_resource,
-		    admin_comment => "Old intrest.bookmark",
-		   });
+    $R->find_set({
+		  label => 'pci_bookmark',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $C_resource,
+		  admin_comment => "Old intrest.bookmark",
+		 });
 
-    my $pci_experience =
-      $R->find_set({
-		    label => 'pci_experience',
-		    is => $C_predicate,
-		    domain => $C_login_account,
-		    range => $experiencable,
-		    admin_comment => "Old intrest.experience",
-		   });
+    $R->find_set({
+		  label => 'pci_experience',
+		  is => $C_predicate,
+		  domain => $C_login_account,
+		  range => $experiencable,
+		  admin_comment => "Old intrest.experience",
+		 });
 
-    my $pci_defined =
-      $R->find_set({
-		    label => 'pci_defined',
-		    is => $C_predicate,
-		    domain => $C_arc,
-		    range => $C_int,
-		    admin_comment => "Old intrest.intrest_defined to be used on interested_in arcs",
-		   });
+    $R->find_set({
+		  label => 'pci_defined',
+		  is => $C_predicate,
+		  domain => $C_arc,
+		  range => $C_int,
+		  admin_comment => "Old intrest.intrest_defined to be used on interested_in arcs",
+		 });
 
-    my $pci_connected =
-      $R->find_set({
-		    label => 'pci_connected',
-		    is => $C_predicate,
-		    domain => $C_arc,
-		    range => $C_int,
-		    admin_comment => "Old intrest.intrest_connected to be used on interested_in arcs",
-		   });
+    $R->find_set({
+		  label => 'pci_connected',
+		  is => $C_predicate,
+		  domain => $C_arc,
+		  range => $C_int,
+		  admin_comment => "Old intrest.intrest_connected to be used on interested_in arcs",
+		 });
 
 
 
@@ -1083,39 +1146,83 @@ sub setup_db
      1 => 'is',
      2 => 'scof',
      3 => 'iso',
-     4 => ['according_to', $perspective, $thought],
+     4 => ['according_to', $perspective, $information_store],
      5 => undef,
-     6 => ['excerpt_from', $C_text, $media],
+     6 => ['excerpt_from', $C_text, $cw],
      7 => ['member_of', $person, $mia],
-     8 => ['original_creator', $media, $ia],
-     9 => ['has_source', $media, $media],
-     10 => ['offered_by', $product, $ia],
+     8 => ['original_creator', $cw, $ia],
+     9 => ['has_source', $ais, $cw],
+     10 => [
+	    {
+	     pred => 'offered_by',
+	     domain_scof => $product,
+	     range => $ia,
+	    },
+	    {
+	     pred => 'always_offered_by',
+	     domain_scof => $product,
+	     range_scof => $ia,
+	    },
+	   ],
      11 => ['compares', $perspective, undef],
-     12 => ['interested_in', $thought, undef],
+     12 => [
+	    {
+	     pred => 'interested_in',
+	     domain => $agent_generic,
+	    },
+	    {
+	     pred => 'allways_interested_in',
+	     domain_scof => $agent_generic,
+	    },
+	   ],
      13 => ['published_date', $media, $C_date],
      14 => ['published_by', $media, $ia],
-     15 => ['has_subtitle', $media, $C_text],
-     16 => ['has_translator', $media, $ia],
+     15 => ['has_subtitle', $cw, $C_text],
+     16 => ['has_translator', $cw, $ia],
      17 => ['has_gtin', $product, $gtin],
      18 => ['has_number_of_pages', $media, $C_int],
      19 => ['has_start_date', $temporal_thing, $C_date],
      20 => ['has_end_date', $temporal_thing, $C_date],
-     21 => ['influenced_by', $thought, $thought],
+     21 => ['influenced_by', $information_store, $information_store],
      22 => ['has_license', $media, $license],
      23 => ['has_copyright', $media, $legal_agent],
      24 => ['has_visiting_address', $ia, $C_text],
-     25 => undef,
-     26 => undef,
+     25 => undef, ### TODO: use zipcode
+     26 => undef, ### TODO: use city
      27 => ['has_virtual_address', $ia, $C_phone_number],
      28 => ['has_permission_document', $C_text, $permission_ibt],
-     29 => ['instances_are_member_of', $person_class, $mia],
+     29 => [
+	    {
+	     pred => 'instances_are_member_of',
+	     domain_scof => $person,
+	     range => $mia,
+	    },
+	   ],
      30 => ['can_be', $class, $class],
      31 => ['is_part_of', $individual, $individual],
-     32 => ['can_be_part_of', $class, $class],
+     32 => [
+	    {
+	     pred => 'can_be_part_of',
+	     domain => $class,
+	     domain_scof => $individual,
+	     range => $class
+	     range_scof => $individual,
+	    },
+	   ],
      33 => ['is_of_language', $media, $C_language],
-     34 => ['practise', $ia, $practisable,
-	    'allways_practice', $person_class, $practisable],
-     35 => ['has_experienced', $person, $experiencable],
+     34 => [
+	    {
+	     pred => 'practise',
+	     domain => $ia,
+	     range => $practisable,
+	    },
+	    {
+	     pred => 'allways_practice',
+	     domain_scof => $person,
+	     range => $practisable,
+	    },
+	   ],
+     35 => ['has_experienced', $ia, $experiencable],
      36 => 'is_influenced_by',
      37 => ['based_upon', $media, $media],
      38 => ['has_epithet', $individual, $individual],
@@ -1124,10 +1231,10 @@ sub setup_db
      41 => undef,
      42 => undef,
      43 => ['has_postal_address', $ia, $C_text],
-     44 => ['instance_owned_by', $temporal_thing_class, $legal_agent],
+     44 => ['instance_owned_by', $temporal_stuff_type, $legal_agent],
      45 => ['has_owner', $temporal_thing, $legal_agent],
      46 => undef,
-     47 => ['uses', $temporal_thing_class, $temporal_thing_class],
+     47 => ['uses', $temporal_stuff_type, $temporal_stuff_type],
     };
 
     my $ortl = $odbix->select_key('reltype','from reltype');
@@ -1188,6 +1295,8 @@ sub setup_db
 	{
 	    $pred->add({ name_rev => $name_rev });
 	}
+
+	$RELTYPE{ $rtid } = $pred;
     }
 
 
@@ -1213,7 +1322,8 @@ sub setup_db
 		    label => 'planet_earth',
 		    is => $location,
 		    pc_old_topic_id => 144335,
-		    cyc_id => 'PlanetEarth',
+		    has_cyc_id => 'PlanetEarth',
+		    has_wikipedia_id => 'Earth',
 		   });
 
     my $sweden =
@@ -1222,6 +1332,7 @@ sub setup_db
 		    is => $location,
 		    pc_old_topic_id => 397071,
 		    is_part_of => $planet_earth,
+		    has_wikipedia_id => 'Sweden',
 		   });
 
     my $country =
@@ -1229,22 +1340,25 @@ sub setup_db
 		    label => 'loc_country',
 		    scof => $location,
 		    pc_old_topic_id => 129520,
-		    cyc_id => 'Country',
+		    has_cyc_id => 'Country',
+		    has_wikipedia_id => 'Country',
 		   });
     my $county =
       $R->find_set({
 		    label => 'loc_county',
 		    scof => $location,
 		    pc_old_topic_id => 541764,
-		    cyc_id => 'County',
+		    has_cyc_id => 'County',
+		    has_wikipedia_id => 'County',
 		   });
 
     my $municipality =
       $R->find_set({
 		    label => 'loc_municipality',
 		    scof => $location,
-		    cyc_id => 'Municipality',
+		    has_cyc_id => 'Municipality',
 		    can_be_part_of => $county,
+		    has_wikipedia_id => 'Municipality',
 		   });
 
     my $city =
@@ -1252,8 +1366,9 @@ sub setup_db
 		    label => 'loc_city',
 		    scof => $location,
 		    pc_old_topic_id => 129524,
-		    cyc_id => 'City',
+		    has_cyc_id => 'City',
 		    can_be_part_of => $municipality,
+		    has_wikipedia_id => 'City',
 		   });
 
     my $parish =
@@ -1261,6 +1376,7 @@ sub setup_db
 		    label => 'loc_parish',
 		    scof => $location,
 		    can_be_part_of => $municipality,
+		    has_wikipedia_id => 'Parish_(country_subdivision)',
 		   });
 
     my $zipcode =
@@ -1268,201 +1384,205 @@ sub setup_db
 		    label => 'loc_zipcode',
 		    scof => $location,
 		    admin_comment => "A specialization of ContactInfoString. Each instance of PostalCode is a character string used by a postal service to designate a particular geographic area.",
-		    cyc_id => 'InternationalPostalCode',
+		    has_cyc_id => 'InternationalPostalCode',
 		    can_be_part_of => $city,
+		    has_wikipedia_id => 'Postal_code',
 		   });
 
 
-
-    my %countyidx;
-  COUNTY:
-    {
-	my $countylist = $odbix->select_list('from county');
-	my( $countyrec, $countyerror ) = $countylist->get_first;
-	while(! $countyerror )
-	{
-	    my $id = sprintf "%.2d", $countyrec->{'county'};
-	    $countyidx{ $id } =
-	      $R->create({
-			  name => $countyrec->{county_name},
-			  code => $id,
-			  name_short => $countyrec->{county_code},
-			  is => $county,
-			  is_part_of => $sweden,
-			 });
-	}
-	continue
-	{
-	    ( $countyrec, $countyerror ) = $countylist->get_next;
-	}
-    }
-
-    my %cityidx;
-  CITY:
-    {
-	debug "retrieving list of all cities";
-	my $citylist = $odbix->select_list('from city');
-	my( $cityrec, $cityerror ) = $citylist->get_first;
-	while(! $cityerror )
-	{
-	    $cityidx{ $cityrec->{'city'} } =
-	      $R->create({
-			  name => ucfirst lc $cityrec->{city_name},
-			  is => $city,
-			  is_part_of => $countyidx{ $cityrec->{city_l} },
-			  geo_x => $cityrec->{city_x},
-			  geo_y => $cityrec->{city_y},
-			 });
-	}
-	continue
-	{
-	    ( $cityrec, $cityerror ) = $citylist->get_next;
-	}
-    }
-
-    my %munidx;
-#  MUNICIPALITY:
-#    {
-#	debug "retrieving list of all municipalities";
-#	my $munlist = $odbix->select_list('from municipality');
-#	my( $munrec, $munerror ) = $munlist->get_first;
-#	while(! $munerror )
-#	{
-#	    $munidx{ $munrec->{'municipality'} } =
-#	      $R->create({
-#			  name => $munrec->{municipality_name},
-#			  is => $municipality,
-#			  code => $munrec->{municipality},
-#			  is_part_of => $countyidx{ $munrec->{municipality_l} },
-#			 });
-#	}
-#	continue
-#	{
-#	    ( $munrec, $munerror ) = $munlist->get_next;
-#	}
-#    }
-
-    my %parishidx;
-#  PARISH:
-#    {
-#	debug "retrieving list of all parishes";
-#	my $parishlist = $odbix->select_list('from parish');
-#	my( $parishrec, $parisherror ) = $parishlist->get_first;
-#	while(! $parisherror )
-#	{
-#	    $parishidx{ $parishrec->{'parish'} } =
-#	      $R->create({
-#			  name => $parishrec->{parish_name},
-#			  is => $parish,
-#			  code => $parishrec->{parish},
-#			  is_part_of => $munidx{ $parishrec->{parish_lk} },
-#			 });
-#	}
-#	continue
-#	{
-#	    ( $parishrec, $parisherror ) = $parishlist->get_next;
-#	}
-#    }
+    #### COMMIT
+    $R->commit;
 
 
-    # Now bring the official codes up to date for 2009
-    #
-    debug "Setting up LKF 2009";
-    open LKF, '<', $Para::CFG->{'pc_root'}.'/doc/lkf2009.txt' or die $!;
-    while(my $line = <LKF>)
-    {
-	chomp $line;
-	next unless $line;
-
-	utf8::decode( $line );
-	my( $key, $val ) = split /=/, $line;
-	my( $l, $k, $f ) = $key =~ /^(..)(..)?(..)?/;
-
-	if( $f )
-	{
-	    debug "F $key = $val";
-	    $parishidx{ $key } =
-	      $R->create({
-			  name => $val,
-			  is => $parish,
-			  code => $key,
-			  is_part_of =>  $munidx{ $l.$k },
-			 });
-	}
-	elsif( $k )
-	{
-	    debug "K $key = $val";
-	    $munidx{ $key } =
-	      $R->create({
-			  name => $val,
-			  is => $municipality,
-			  code => $key,
-			  is_part_of => $countyidx{ $l },
-			 });
-	}
-	elsif( $l )
-	{
-	    debug "L $key = $val";
-	    # Done above
-	}
-	else
-	{
-	    die "Could not parse key $key";
-	}
-    }
-
-
-
-
-
-
-
-
-  ZIPCODE:
-    {
-	my %trans =
-	  (
-	   1917 => '0331',
-	  );
-
-	debug "retrieving list of all zipcodes";
-	my $ziplist = $odbix->select_list('from zip');
-	my( $ziprec, $ziperror ) = $ziplist->get_first;
-	while(! $ziperror )
-	{
-	    my $zip_city = $ziprec->{zip_city};
-	    my $zip_lk = sprintf "%.4d", $ziprec->{zip_lk};
-
-	    if( $trans{$zip_lk} ){ $zip_lk = $trans{$zip_lk} };
-
-
-	    unless( $cityidx{ $zip_city } )
-	    {
-		throw "City $zip_city not found in city index";
-	    }
-
-	    unless( $munidx{ $zip_lk } )
-	    {
-		throw "Municipality $zip_lk not found in mun index";
-	    }
-
-	    $R->create({
-			is => $zipcode,
-			code => $ziprec->{zip},
-			is_part_of => [
-				       $cityidx{ $zip_city },
-				       $munidx{ $zip_lk },
-				      ],
-			geo_x => $ziprec->{zip_x},
-			geo_y => $ziprec->{zip_y},
-		       });
-	}
-	continue
-	{
-	    ( $ziprec, $ziperror ) = $ziplist->get_next;
-	}
-    }
-
+#&    my %countyidx;
+#&  COUNTY:
+#&    {
+#&	my $countylist = $odbix->select_list('from county');
+#&	my( $countyrec, $countyerror ) = $countylist->get_first;
+#&	while(! $countyerror )
+#&	{
+#&	    my $id = sprintf "%.2d", $countyrec->{'county'};
+#&	    $countyidx{ $id } =
+#&	      $R->create({
+#&			  name => $countyrec->{county_name},
+#&			  code => $id,
+#&			  name_short => $countyrec->{county_code},
+#&			  is => $county,
+#&			  is_part_of => $sweden,
+#&			 });
+#&	}
+#&	continue
+#&	{
+#&	    ( $countyrec, $countyerror ) = $countylist->get_next;
+#&	}
+#&    }
+#&
+#&    my %cityidx;
+#&  CITY:
+#&    {
+#&	debug "retrieving list of all cities";
+#&	my $citylist = $odbix->select_list('from city');
+#&	my( $cityrec, $cityerror ) = $citylist->get_first;
+#&	while(! $cityerror )
+#&	{
+#&	    $cityidx{ $cityrec->{'city'} } =
+#&	      $R->create({
+#&			  name => ucfirst lc $cityrec->{city_name},
+#&			  is => $city,
+#&			  is_part_of => $countyidx{ $cityrec->{city_l} },
+#&			  geo_x => $cityrec->{city_x},
+#&			  geo_y => $cityrec->{city_y},
+#&			 });
+#&	}
+#&	continue
+#&	{
+#&	    ( $cityrec, $cityerror ) = $citylist->get_next;
+#&	}
+#&    }
+#&
+#&    my %munidx;
+#&#  MUNICIPALITY:
+#&#    {
+#&#	debug "retrieving list of all municipalities";
+#&#	my $munlist = $odbix->select_list('from municipality');
+#&#	my( $munrec, $munerror ) = $munlist->get_first;
+#&#	while(! $munerror )
+#&#	{
+#&#	    $munidx{ $munrec->{'municipality'} } =
+#&#	      $R->create({
+#&#			  name => $munrec->{municipality_name},
+#&#			  is => $municipality,
+#&#			  code => $munrec->{municipality},
+#&#			  is_part_of => $countyidx{ $munrec->{municipality_l} },
+#&#			 });
+#&#	}
+#&#	continue
+#&#	{
+#&#	    ( $munrec, $munerror ) = $munlist->get_next;
+#&#	}
+#&#    }
+#&
+#&    my %parishidx;
+#&#  PARISH:
+#&#    {
+#&#	debug "retrieving list of all parishes";
+#&#	my $parishlist = $odbix->select_list('from parish');
+#&#	my( $parishrec, $parisherror ) = $parishlist->get_first;
+#&#	while(! $parisherror )
+#&#	{
+#&#	    $parishidx{ $parishrec->{'parish'} } =
+#&#	      $R->create({
+#&#			  name => $parishrec->{parish_name},
+#&#			  is => $parish,
+#&#			  code => $parishrec->{parish},
+#&#			  is_part_of => $munidx{ $parishrec->{parish_lk} },
+#&#			 });
+#&#	}
+#&#	continue
+#&#	{
+#&#	    ( $parishrec, $parisherror ) = $parishlist->get_next;
+#&#	}
+#&#    }
+#&
+#&
+#&    # Now bring the official codes up to date for 2009
+#&    #
+#&    debug "Setting up LKF 2009";
+#&    open LKF, '<', $Para::CFG->{'pc_root'}.'/doc/lkf2009.txt' or die $!;
+#&    while(my $line = <LKF>)
+#&    {
+#&	chomp $line;
+#&	next unless $line;
+#&
+#&	utf8::decode( $line );
+#&	my( $key, $val ) = split /=/, $line;
+#&	my( $l, $k, $f ) = $key =~ /^(..)(..)?(..)?/;
+#&
+#&	if( $f )
+#&	{
+#&	    debug "F $key = $val";
+#&	    $parishidx{ $key } =
+#&	      $R->create({
+#&			  name => $val,
+#&			  is => $parish,
+#&			  code => $key,
+#&			  is_part_of =>  $munidx{ $l.$k },
+#&			 });
+#&	}
+#&	elsif( $k )
+#&	{
+#&	    debug "K $key = $val";
+#&	    $munidx{ $key } =
+#&	      $R->create({
+#&			  name => $val,
+#&			  is => $municipality,
+#&			  code => $key,
+#&			  is_part_of => $countyidx{ $l },
+#&			 });
+#&	}
+#&	elsif( $l )
+#&	{
+#&	    debug "L $key = $val";
+#&	    # Done above
+#&	}
+#&	else
+#&	{
+#&	    die "Could not parse key $key";
+#&	}
+#&    }
+#&
+#&
+#&
+#&
+#&
+#&
+#&
+#&
+#&  ZIPCODE:
+#&    {
+#&	my %trans =
+#&	  (
+#&	   1917 => '0331',
+#&	  );
+#&
+#&	debug "retrieving list of all zipcodes";
+#&	my $ziplist = $odbix->select_list('from zip');
+#&	my( $ziprec, $ziperror ) = $ziplist->get_first;
+#&	while(! $ziperror )
+#&	{
+#&	    my $zip_city = $ziprec->{zip_city};
+#&	    my $zip_lk = sprintf "%.4d", $ziprec->{zip_lk};
+#&
+#&	    if( $trans{$zip_lk} ){ $zip_lk = $trans{$zip_lk} };
+#&
+#&
+#&	    unless( $cityidx{ $zip_city } )
+#&	    {
+#&		throw "City $zip_city not found in city index";
+#&	    }
+#&
+#&	    unless( $munidx{ $zip_lk } )
+#&	    {
+#&		throw "Municipality $zip_lk not found in mun index";
+#&	    }
+#&
+#&	    $R->create({
+#&			is => $zipcode,
+#&			code => $ziprec->{zip},
+#&			is_part_of => [
+#&				       $cityidx{ $zip_city },
+#&				       $munidx{ $zip_lk },
+#&				      ],
+#&			geo_x => $ziprec->{zip_x},
+#&			geo_y => $ziprec->{zip_y},
+#&		       });
+#&	}
+#&	continue
+#&	{
+#&	    ( $ziprec, $ziperror ) = $ziplist->get_next;
+#&	}
+#&    }
+#&
 
 # TODO: Import street and address
 
@@ -1505,71 +1625,6 @@ sub setup_db
 # TODO: Import score
 
 # TODO: Import slogan
-
-
-    # TS
-    #
-    # ts_entry     -
-    # ts_topic     -
-    # ontopic      -
-    # completeness -
-    # correctness  -
-    # delight      -
-    # ts_created   -
-    # ts_changedby -
-    # ts_updated   -
-    # ts_status    -
-    # ts_comment   -
-    # ts_score     -
-    # ts_active    -
-    # ts_createdby -
-
-    my $cia =
-      $R->find_set({
-		    label => 'contains_information_about',
-		    is => $C_predicate,
-		    domain => $media,
-		    range => $C_resource,
-		    cyc_id => 'containsInformationAbout',
-		    admin_comment => "Old TS. This predicate relates sources of information to their topics.",
-		   });
-
-
-    # TALIAS
-    #
-    # talias_t         -
-    # talias           -
-    # talias_updated   -
-    # talias_changedby -
-    # talias_status    -
-    # talias_autolink  pca_autolink
-    # talias_index     pca_index
-    # talias_active    -
-    # talias_created   -
-    # talias_createdby -
-    # talias_urlpart   url_part
-    # talias_language  is_of_language
-
-    my $pca_autolink =
-      $R->find_set({
-		    label => 'pca_autolink',
-		    is => $C_predicate,
-		    domain => $C_text,
-		    range => $C_bool,
-		    admin_comment => "Old talias.talias_autolink",
-		   });
-
-    my $pca_index =
-      $R->find_set({
-		    label => 'pca_index',
-		    is => $C_predicate,
-		    domain => $C_text,
-		    range => $C_bool,
-		    admin_comment => "Old talias.talias_index",
-		   });
-
-
-
 
 
 
@@ -1650,7 +1705,7 @@ sub setup_db
 	my %va =
 	  (
 	   sys_email => $C_email_address,
-	   home_online_uri => $C_url,
+	   home_online_uri => $C_website_url,
 	   home_online_icq => $address_icq,
 	   home_online_msn => $address_msn,
 	   home_tele_phone => $address_phone_stationary,
@@ -1660,7 +1715,7 @@ sub setup_db
 
 	debug "retrieving list of all members";
 
-	my $list = $odbix->select_list('from member where member_level > 4 and member > 0 order by member limit 5');
+	my $list = $odbix->select_list('from member where member_level > 4 and member > 0 order by member limit 0');
 	my( $rec, $error ) = $list->get_first;
 	while(! $error )
 	{
@@ -1758,88 +1813,109 @@ sub setup_db
 
 
 
-######## Importing topic
+    ######## Importing topic
+    #  t                        pc_old_topic_id
+    #  t_pop                    -
+    #  t_size                   -
+    #  t_created                node(created)
+    #  t_createdby              node(created)
+    #  t_updated                -
+    #  t_changedby              -
+    #  t_status                 ... pc_featured_topic
+    #  t_title                  name
+    #  t_text                   description
+    #  t_entry                  is $pc_entry
+    #  t_entry_parent           is_part_of / cia
+    #  t_entry_next             ... (use weight)
+    #  t_entry_imported         -
+    #  t_file                   pc_public_path
+    #  t_class                  is $class
+    #  t_ver                    -
+    #  t_replace                -
+    #  t_connected              pc_connected
+    #  t_active                 -
+    #  t_connected_status       -
+    #  t_oldfile                -
+    #  t_urlpart                url_part
+    #  t_title_short_old        -
+    #  t_title_short_plural_old -
+    #  t_comment_admin          admin_comment
+    #  t_published              -
+    #  t_title_short            name_short
+    #  t_title_short_plural     ... is $term_plural
+    #  t_vacuumed               -
+
+    ## t_status: http://old.paranormal.se/meta/devel/entry_status.html
+
+    $pc_topic =
+      $R->find_set({
+		    label => 'pc_topic',
+		    is => $class,
+		    admin_comment => "A topic that is meant to be presented as an encyclopedia article. Not all topics from old paranormal should be topics.",
+		   });
+
+    $pc_entry =
+      $R->find_set({
+		    label => 'pc_entry',
+		    scof => $media,
+		    admin_comment => "A topic that is meant to be presented as an encyclopedia article. Not all topics from old paranormal should be topics.",
+		   });
+
+    $pc_featured_topic =
+      $R->find_set({
+		    label => 'pc_featured_topic',
+		    scof => $pc_topic,
+		    admin_comment => "A topic of high quality regarding its entries and metadata. Old t.t_status 5 ('final' Official entry)",
+		    has_wikipedia_id => 'Category:Featured_articles',
+		   });
+
+    $word_plural =
+      $R->find_set({
+		    label => 'term_plural',
+		    scof => $C_term,
+		    admin_comment => "A term in plural form",
+		    has_wikipedia_id => 'Plural',
+		   });
+
+    $R->find_set({
+		  label => 'pc_public_path',
+		  is => $C_predicate,
+		  domain => $pc_topic,
+		  range => $C_file,
+		  admin_comment => "Old t.t_file",
+		 });
+
+    $R->find_set({
+		  label => 'pc_connected',
+		  is => $C_predicate,
+		  domain => $pc_topic,
+		  range => $C_int,
+		  admin_comment => "Old t.t_connected",
+		 });
+
+    $R->find_set({
+		  label => 'cia',
+		  is => $C_predicate,
+		  domain => $media,
+		  range => $C_resource,
+		  has_cyc_id => 'containsInformationAbout',
+		  admin_comment => "Contains information about. Old TS. This predicate relates sources of information to their topics.",
+		 });
+    # See also containsInformation
+    # containsInfoPropositional-IBT
+    # propositionalInfoAbout
+
+
+    $R->commit;
+
   TOPIC:
     {
-        #  t                        pc_old_topic_id
-        #  t_pop                    -
-        #  t_size                   -
-        #  t_created                node(created)
-        #  t_createdby              node(created)
-        #  t_updated                -
-        #  t_changedby              -
-        #  t_status                 ...
-        #  t_title                  name
-        #  t_text                   description
-        #  t_entry                  ...
-        #  t_entry_parent           is_part_of
-        #  t_entry_next             ... (use weight)
-        #  t_entry_imported         -
-        #  t_file                   pc_public_path
-        #  t_class                  ...
-        #  t_ver                    -
-        #  t_replace                -
-        #  t_connected              pc_connected
-        #  t_active                 -
-        #  t_connected_status       -
-        #  t_oldfile                -
-        #  t_urlpart                url_part
-        #  t_title_short_old        -
-        #  t_title_short_plural_old -
-        #  t_comment_admin          admin_comment
-        #  t_published              -
-        #  t_title_short            name_short
-        #  t_title_short_plural     ...
-        #  t_vacuumed               -
-
-	## t_status: http://old.paranormal.se/meta/devel/entry_status.html
-
-	debug "retrieving list of all topics";
-	my $list = $odbix->select_list('from t where t_status > 1 order by t');
+	debug "======= retrieving list of all topics";
+	my $list = $odbix->select_list('from t where t_active is true and t_status > 1 order by t limit 0');
 	my( $rec, $error ) = $list->get_first;
 	while(! $error )
 	{
-	    my $created_by = $R->get({pc_member_id => $rec->{'t_createdby'}});
-
-	    my %prop =
-	      (
-	       pc_old_topic_id => $rec->{'t'},
-	       created => $rec->{'t_created'},
-	       created_by => $created_by,
-	       name => $rec->{'t_title'},
-	       description => $rec->{'t_text'},
-	      );
-
-	    if( my $pc_public_path = $rec->{'t_file'} )
-	    {
-		$prop{ pc_public_path } = $pc_public_path;
-	    }
-
-	    if( my $pc_connected = $rec->{'t_connected'} )
-	    {
-		$prop{ pc_connected } = $pc_connected;
-	    }
-
-	    if( my $url_part = $rec->{'t_urlpart'} )
-	    {
-		$prop{ url_part ) = $url_part;
-	    }
-
-	    if( my $admin_comment = $rec->{'t_comment_admin'} )
-	    {
-		$prop{ admin_comment } = $admin_comment;
-	    }
-
-	    if( my $title_short = $rec->{'t_title_short'} )
-	    {
-		$prop{ title_short }  = $title_short;
-	    }
-
-	    if( my $t_status = $rec->{'t_status'} )
-	    {
-	    }
-
-	    last;
+	    import_topic_main( $rec->{'t'}, $rec );
 	}
 	continue
 	{
@@ -1848,6 +1924,363 @@ sub setup_db
     };
 
 
+    # Adding main parent
+    debug "======= Couple imported topics to their parents";
+    foreach my $tid ( keys %TOPIC )
+    {
+	import_topic_parent( $tid );
+    }
+
+    # Adding additional entry tree
+    debug "======= Couple eimported topics to their entries";
+    foreach my $tid ( keys %TOPIC )
+    {
+	import_topic_entries( $tid );
+    }
+
+    debug "======= Topics import done";
+
+
+
+
+    # TS
+    #
+    # ts_entry     ...
+    # ts_topic     ...
+    # ontopic      -
+    # completeness -
+    # correctness  -
+    # delight      -
+    # ts_created   -
+    # ts_changedby -
+    # ts_updated   -
+    # ts_status    -
+    # ts_comment   -
+    # ts_score     -
+    # ts_active    -
+    # ts_createdby -
+
+    $R->commit;
+
+  TS:
+    {
+	debug "======= retrieving list of all topic statements";
+	my $list = $odbix->select_list('from ts where ts_active is true and ts_status > 2 order by ts_entry limit 0');
+	my( $rec, $error ) = $list->get_first;
+	while(! $error )
+	{
+	    my $e = import_topic( $rec->{ts_entry} );
+	    my $t = import_topic( $rec->{ts_topic} );
+	    $e->add_arc({'cia' => $t});
+	}
+	continue
+	{
+	    ( $rec, $error ) = $list->get_next;
+	}
+    };
+
+
+
+    # TALIAS
+    #
+    # talias_t         -
+    # talias           -
+    # talias_updated   -
+    # talias_changedby -
+    # talias_status    -
+    # talias_autolink  pca_autolink
+    # talias_index     pca_index
+    # talias_active    -
+    # talias_created   -
+    # talias_createdby -
+    # talias_urlpart   url_part
+    # talias_language  is_of_language
+
+    $R->find_set({
+		  label => 'pca_autolink',
+		  is => $C_predicate,
+		  domain => $C_text,
+		  range => $C_bool,
+		  admin_comment => "Old talias.talias_autolink",
+		 });
+
+    $R->find_set({
+		  label => 'pca_index',
+		  is => $C_predicate,
+		  domain => $C_text,
+		  range => $C_bool,
+		  admin_comment => "Old talias.talias_index",
+		 });
+
+    $R->commit;
+
+  TALIAS:
+    {
+	debug "======= retrieving list of all topic aliases";
+	my $list = $odbix->select_list('from talias where talias_active is true and talias_status > 3 order by talias_t limit 0');
+	my( $rec, $error ) = $list->get_first;
+	while(! $error )
+	{
+	    my $t = import_topic( $rec->{talias_t} );
+	    my $str = $rec->{talias};
+
+	    debug "Alias $str for ".$t->sysdesig;
+
+#	    debug $t->list('name')->sysdesig;
+
+	    my $al;
+	    foreach my $eal ( $t->list('name')->as_array )
+	    {
+		if( lc($eal->plain) eq lc($str) )
+		{
+		    $al = $eal;
+		    last;
+		}
+	    }
+
+	    unless( $al )
+	    {
+		$al = $L->new($str,$C_term);
+		$t->add({'name'=>$al});
+	    }
+
+	    my %props;
+	    if( $rec->{talias_autolink} )
+	    {
+		$props{pca_autolink} = 1;
+	    }
+
+	    if( $rec->{talias_index} )
+	    {
+		$props{pca_index} = 1;
+	    }
+
+	    $props{url_part} = $rec->{talias_urlpart};
+
+	    if( $rec->{talias_language} )
+	    {
+		my $lang =  import_topic( $rec->{talias_language} );
+		$props{is_of_language} = $lang;
+	    }
+
+	    # TODO: Set the creator and created date of literal
+	    $al->add(\%props);
+	}
+	continue
+	{
+	    ( $rec, $error ) = $list->get_next;
+	}
+    };
+
+
+    # MEDIA
+    #
+    # media                 ...
+    # media_mimetype        is ...?
+    # media_url             has_url
+    # media_checked_working -
+    # media_checked_failed  -
+    # media_speed           -
+
+    # This is all mimetypes used in old db;
+    #   application/pdf
+    #   email
+    #   image/gif
+    #   image/jpeg
+    #   image/png
+    #   image/svg+xml
+    #   text/html
+    #   text/plain
+
+    my %mtype;
+
+    my $computer_file_ais
+      = $R->find_set({
+		      label => 'computer_file_ais',
+		      admin_comment => "Each instance of ComputerFile-AIS is an abstract series of bits encoding some information and conforming to some file system protocol.",
+		      scof => $ais,
+		      has_cyc_id => 'ComputerFile-AIS',
+		     });
+
+    my $computer_file_type_by_format
+      = $R->find_set({
+		      label => 'computer_file_type_by_format',
+		      admin_comment => "A collection of collections of computer files [ComputerFile-AIS]. Each instance of ComputerFileTypeByFormat (e.g. JPEGFile) is a collection of all ComputerFile-AISs that conform to a single preestablished layout for electronic data. Programs accept data as input in a certain format, process it, and provide it as output in the same or another format. This constant refers to the format of the data. For every instance of ComputerFileCopy, one can assert a fileFormat for it.",
+		      is => $class, # SecondOrderCollection
+		      has_cyc_id => 'ComputerFileTypeByFormat',
+		     });
+
+    $mtype{'application/pdf'}
+      = $R->find_set({
+		      label => 'file_pdf',
+		      admin_comment => "Computer files encoded in the PDF file format.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'PortableDocumentFormatFile',
+		      code => 'application/pdf',
+		     });
+
+    $mtype{'email'}
+      = $R->find_set({
+		      label => 'file_email',
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'EMailFile',
+		      code => 'email',
+		     });
+
+    my $file_image
+      = $R->find_set({
+		      label => 'file_image',
+		      admin_comment => "A specialization of ComputerFile-AIS. Each ComputerImageFile contains a digital representation of some VisualImage, and is linked to an instance of ComputerImageFileTypeByFormat via the predicate fileFormat.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'ComputerImageFile',
+		     });
+
+    $mtype{'image/gif'}
+      = $R->find_set({
+		      label => 'file_gif',
+		      admin_comment => "A collection of ComputerImageFiles. Each GIFFile is encoded in the \"Graphics Interchange Format\". GIFFiles are extremely common for inline images on web pages, and generally have filenames that end in \".gif\".",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      has_cyc_id => 'GIFFile',
+		      code => 'image/gif',
+		     });
+
+    $mtype{'image/jpeg'}
+      = $R->find_set({
+		      label => 'file_jpeg',
+		      admin_comment => "A collection of ComputerImageFiles. Each JPEGFile is a ComputerImageFile whose fileFormat conforms to the standard image compression algorithm designed by the Joint Photographic Experts Group for compressing either full-colour or grey-scale digital images of 'natural', real-world scenes. Instances of JPEGFile often have filenames that end in '.jpg' or '.jpeg'.",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      has_cyc_id => 'JPEGFile',
+		      code => 'image/jpeg',
+		     });
+
+    $mtype{'image/png'}
+      = $R->find_set({
+		      label => 'file_png',
+		      admin_comment => "The collection of computer image files encoded in the '.png' file format. Designed to replace GIF files, PNG files have three main advantages: alpha channels (variable transparency), gamma correction (cross-platform control of image brightness) and two-dimensional interlacing.",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      has_cyc_id => 'PortableNetworkGraphicsFile',
+		      code => 'image/png',
+		     });
+
+    $mtype{'image/svg+xml'}
+      = $R->find_set({
+		      label => 'file_svg',
+		      admin_comment => "An SVG image file",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      code => 'image/svg+xml',
+		     });
+
+    $mtype{'text/html'}
+      = $R->find_set({
+		      label => 'file_html',
+		      admin_comment => "The subcollection of ComputerFile-AIS written in the language HypertextMarkupLanguage.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'HTMLFile',
+		      code => 'text/html',
+		     });
+
+    $mtype{'text/plain'}
+      = $R->find_set({
+		      label => 'file_text_plain',
+		      admin_comment => "A plain text file with any charset.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      code => 'text/plain',
+		     });
+
+    $R->commit;
+
+  MEDIA:
+    {
+	debug "======= retrieving list of all media";
+	my $list = $odbix->select_list('from media order by media limit 0');
+	my( $rec, $error ) = $list->get_first;
+	while(! $error )
+	{
+	    my $t = import_topic( $rec->{media} );
+	    next unless $t;
+
+	    my $code_str = $rec->{'media_mimetype'};
+	    my $url_str = $rec->{'media_url'};
+
+	    $t->add({
+		     is => $mtype{$code_str},
+		     has_url => $url_str,
+		    });
+	}
+	continue
+	{
+	    ( $rec, $error ) = $list->get_next;
+	}
+    };
+
+
+
+
+    #### Specifying node types
+    {
+	my %map =
+	  (
+	   179029 => $practisable,
+	   
+	  );
+
+	foreach my $key ( keys %map )
+	{
+	    my $n = import_topic( $key );
+	    $n->add({is => $map{$key} });
+	}
+    };
+
+
+
+
+
+
+
+    # REL
+    #
+    # rel_topic     -
+    # rev           subj
+    # rel           obj
+    # rel_type      pred
+    # rel_status    -
+    # rel_value     value
+    # rel_comment   description
+    # rel_updated   -
+    # rel_changedby -
+    # rel_strength  arc_weight
+    # rel_active    -
+    # rel_createdby created_by
+    # rel_created   created
+    # rel_indirect  -
+    # rel_implicit  -
+
+  REL:
+    {
+	$R->commit;
+
+	# Tested with 551287, 546953
+	debug "======= retrieving list of all rel";
+	my $list = $odbix->select_list('from rel where rel_active is true and rel_indirect is false and rel_strength >= 30 and rel_topic>0 order by rev');
+	my( $rec, $error ) = $list->get_first;
+	while(! $error )
+	{
+	    import_topic_arc( $rec );
+	}
+	continue
+	{
+	    ( $rec, $error ) = $list->get_next;
+	}
+    };
 
 
 
@@ -1859,6 +2292,480 @@ sub setup_db
 
     return;
 }
+
+
+######################################################################
+
+sub tree_entry
+{
+    my( $e ) = @_;
+    my $parent = $e->first_prop('is_part_of');
+
+    $e->{pc_wc} ||= 0; # weight counter
+
+    foreach my $se ( import_childs($e)->as_array )
+    {
+	$e->{pc_wc} ++;
+	$se->update({weight => $e->{pc_wc}});
+	tree_entry($se);
+    }
+
+    while( $TOPIC{$e->pc_old_topic_id}{next} )
+    {
+	my $next = import_topic( $TOPIC{$e->pc_old_topic_id}{next} );
+	$parent->{pc_wc} ++;
+	$next->add({
+		    is_part_of => $parent,
+		    weight => $parent->{pc_wc},
+		   });
+
+	$next->{pc_wc} ||= 0; # weight counter
+	foreach my $se ( import_childs($next)->as_array )
+	{
+	    $next->{pc_wc} ++;
+	    $se->update({weight => $next->{pc_wc}});
+	    tree_entry($se);
+	}
+	$e = $next;
+    }
+}
+
+
+######################################################################
+
+sub import_topic_main
+{
+    my( $id, $rec ) = @_;
+
+    unless( $rec )
+    {
+	$rec = $odbix->select_possible_record('from t where t_active is true and t=?', $id);
+	unless( $rec )
+	{
+	    return undef;
+	}
+    }
+
+
+###    my $created_by = $R->get({pc_member_id => $rec->{'t_createdby'}});
+
+    my $title;
+
+    my %prop =
+      (
+#       pc_old_topic_id => $id,
+       created => $rec->{'t_created'},
+###       created_by => $created_by,
+       description => $rec->{'t_text'},
+       is => [],
+      );
+
+    $TOPIC{$id} = {};
+
+    if( $rec->{'t_title'} )
+    {
+	$title = $L->new($rec->{'t_title'},'term');
+	push @{$prop{name}}, $title;
+    }
+
+    if( my $pc_connected = $rec->{'t_connected'} )
+    {
+	$prop{ pc_connected } = $pc_connected;
+    }
+
+    if( my $url_part = $rec->{'t_urlpart'} )
+    {
+	$prop{ url_part } = $url_part;
+    }
+
+    if( my $admin_comment = $rec->{'t_comment_admin'} )
+    {
+	$prop{ admin_comment } = $admin_comment;
+    }
+
+### We do not know what is in this slot. Leave it...
+#
+#    if( $rec->{'t_title_short'} )
+#    {
+#	# TODO: use name with prop is short
+#	my $title_short = $L->new($rec->{'t_title_short'},'term');
+#	$prop{ name_short }  = $title_short;
+#	push @{$prop{name}}, $title_short;
+#    }
+
+    if( my $t_status = $rec->{'t_status'} )
+    {
+	if( $t_status == 5 )
+	{
+	    push @{$prop{is}}, $pc_featured_topic;
+	}
+    }
+
+    if( $rec->{t_entry} )
+    {
+	push @{$prop{is}}, $pc_entry;
+    }
+    else # topic
+    {
+	push @{$prop{is}}, $pc_topic;
+
+	if( my $pc_public_path = $rec->{'t_file'} )
+	{
+	    $prop{ pc_public_path } = $pc_public_path;
+	}
+    }
+
+    if( my $parent = $rec->{t_entry_parent} )
+    {
+	$TOPIC{$id}{parent} = $parent;
+    }
+
+    if( my $next = $rec->{t_entry_next} )
+    {
+	$TOPIC{$id}{next} = $next;
+    }
+
+    if( $rec->{t_class} )
+    {
+	push @{$prop{is}}, $class;
+    }
+
+    if( my $plural = $rec->{t_title_short_plural} )
+    {
+	my $name = $L->new($plural,'term_plural');
+	push @{$prop{name}}, $name;
+    }
+
+    # May be one of the nodes created previously
+    my $n = $R->find({pc_old_topic_id=>$id})->get_first_nos;
+    unless( $n )
+    {
+	$prop{pc_old_topic_id} = $id;
+	$n = $R->create(\%prop);
+    }
+
+    $TOPIC{$id}{node} = $n;
+
+    if( $title )
+    {
+	$title->lit_revarc->set_weight( 10, {force_same_version=>1} );
+    }
+
+    return $TOPIC{$id}{node};
+}
+
+
+######################################################################
+
+sub import_topic_parent
+{
+    my( $id ) = @_;
+
+    my $th = $TOPIC{$id};
+    if( $th->{parent} )
+    {
+	if( my $parent = import_topic( $th->{parent} ) )
+	{
+	    my $n = $th->{node};
+	    if( $parent->has_value({is => $pc_topic}) )
+	    {
+		# Text officially belongs to this topic
+		my $ciaa = $n->add_arc({'cia' => $parent});
+		$ciaa->set_weight( 10, {force_same_version=>1} );
+	    }
+	    else # entry
+	    {
+		$n->add({is_part_of => $parent});
+	    }
+	}
+    }
+}
+
+
+######################################################################
+
+sub import_topic_entries
+{
+    my( $id ) = @_;
+
+    my $th = $TOPIC{$id};
+
+    my $n = $th->{node};
+    debug "  importing entries for ".$n->sysdesig;
+
+
+    unless( $n->has_value({is=>$pc_topic}) )
+    {
+	debug "    not a topic";
+	return;
+    }
+
+    foreach my $me ( import_childs($n)->as_array )
+    {
+	debug "  got main entry ".$me->sysdesig;
+	$me->{pc_wc} ||= 0; # weight counter
+
+	foreach my $se ( import_childs($me)->as_array )
+	{
+	    $me->{pc_wc} ++;
+	    $se->update({weight => $me->{pc_wc}});
+	    tree_entry($se);
+	}
+
+	my $e = $me;
+	debug "  extracting chained entries for ".$e->sysdesig;
+	while( $TOPIC{$e->pc_old_topic_id}{next} )
+	{
+	    my $next = import_topic( $TOPIC{$e->pc_old_topic_id}{next} );
+	    last unless $next;
+	    debug "    found ".$next->sysdesig;
+	    $me->{pc_wc} ++;
+	    $next->add({
+			is_part_of => $me,
+			weight => $me->{pc_wc},
+		       });
+
+	    $next->{pc_wc} ||= 0; # weight counter
+	    debug "    getting childs of ".$next->sysdesig;
+	    foreach my $se ( import_childs($next)->as_array )
+	    {
+		debug "      found child ".$se->sysdesig;
+		$next->{pc_wc} ++;
+		$se->update({weight => $next->{pc_wc}});
+		tree_entry($se);
+	    }
+
+	    debug "    switching to look for chained entries for ".$e->sysdesig;
+	    $e = $next;
+	}
+    }
+}
+
+
+######################################################################
+
+sub import_topic
+{
+    my( $id, $rec ) = @_;
+
+    return undef unless $id;
+
+#    debug "  get topic $id";
+
+    if( $TOPIC{$id} )
+    {
+	return $TOPIC{$id}{node};
+    }
+
+    my $n = import_topic_main( $id, $rec );
+    return undef unless $n;
+
+###    import_topic_parent( $id );
+###    import_topic_entries( $id );
+
+    return $n;
+}
+
+
+######################################################################
+
+sub import_childs
+{
+    my( $n ) = @_;
+
+    if( $n->{p4_imported_childs} )
+    {
+	return $n->{p4_imported_childs};
+    }
+
+    unless( UNIVERSAL::isa $n, 'Rit::Base::Resource' )
+    {
+	confess "Got $n";
+    }
+
+    debug "  Get childs to ".$n->pc_old_topic_id;
+    my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t_entry_parent=? order by t', $n->first_prop('pc_old_topic_id')->plain);
+    debug "  Got ".$list->size." results";
+
+    my @childs;
+    foreach my $rec ( $list->as_array )
+    {
+	push @childs, import_topic( $rec->{t}, $rec );
+    }
+
+    return $n->{p4_imported_childs} = Rit::Base::List->new(\@childs);
+}
+
+
+######################################################################
+
+sub import_topic_arcs
+{
+    my( $n ) = @_;
+
+    return if $n->{p4_imported_arcs};
+
+    if( $n->{p4_imported_arcs_partial} )
+    {
+	debug "**** Partially imported arcs for";
+	debug "**** ".$n->sysdesig;
+	return;
+    }
+
+
+    $n->{p4_imported_arcs_partial} = 1;
+
+    my $list = $odbix->select_list('from rel where rel_active is true and rel_indirect is false and rel_strength >= 30 and rev=? order by rel_topic', $n->pc_old_topic_id->plain);
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	import_topic_arc( $rec );
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+
+    unless( $list->size )
+    {
+	debug $n->sysdesig." has no rels";
+    }
+
+    $n->{p4_imported_arcs} = 1;
+}
+
+
+######################################################################
+
+sub import_topic_arc
+{
+    my( $rec ) = @_;
+
+    my $id = $rec->{rel_topic};
+    return $TOPIC{$id}{node} if $TOPIC{$id};
+
+    my $subj = import_topic( $rec->{rev} );
+    return unless $subj;
+
+    my $pred_obj = $RELTYPE{ $rec->{rel_type} };
+    return unless $pred_obj; # unhandled reltype
+    my $pred = $pred_obj->plain;
+
+###    my $created_by = $R->get({pc_member_id => $rec->{'rel_createdby'}});
+
+
+    my %props =
+      (
+       subj => $subj->id,
+       pred => $pred,
+       arc_weight => $rec->{rel_strength},
+###       created_by => $created_by,
+       created => $rec->{created},
+      );
+
+    my $value_obj;
+    if( $pred_obj->objtype )
+    {
+	my $obj = import_topic( $rec->{rel} );
+	next unless $obj;
+
+	debug sprintf "Creating %s --%s--> %s",
+	  $subj->sysdesig, $pred, $obj->sysdesig;
+
+	unless( $pred eq 'see_also' ) ### Loopy critters
+	{
+	    import_topic_arcs( $obj );
+	}
+
+	# Automaticly making the obj a class if acting like one
+	#
+	if( $pred_obj->valtype->equals($class) )
+	{
+	    unless( $obj->has_value({is => $class}) )
+	    {
+		debug " AUTOCREATING class";
+		push  @AUTOCREATED, $obj->add_arc({is => $class});
+	    }
+	}
+	elsif( $pred_obj->valtype->equals($individual) )
+	{
+	    if( my $class = $obj->first_prop('is',{is=>$pc_topic},'adirect') )
+	    {
+		unless( $class->has_value({scof => $individual}) )
+		{
+		    debug " AUTOCREATING class-individual";
+		    push  @AUTOCREATED, $class->add_arc({scof => $individual});
+		}
+	    }
+
+	    unless( $obj->has_value({is => $individual}) )
+	    {
+		debug " AUTOCREATING individual";
+		push  @AUTOCREATED, $obj->add_arc({is => $individual});
+	    }
+	}
+	elsif( $pred_obj->valtype->equals($information_store) )
+	{
+	    unless( $obj->has_value({is => $information_store}) )
+	    {
+		debug " AUTOCREATING information_store";
+		push  @AUTOCREATED, $obj->add_arc({is => $information_store});
+	    }
+	}
+
+	$props{obj} = $obj->id;
+	$value_obj = $obj;
+    }
+    else
+    {
+	my $val = $rec->{rel_value};
+	next unless length $val;
+	$props{value} = $val;
+
+	my $valtype = $pred_obj->valtype;
+	$value_obj = Rit::Base::Resource->
+	  get_by_anything( $val,
+			   {
+			    valtype => $valtype,
+			    subj_new => $subj,
+			    pred_new => $pred_obj,
+			   });
+
+	debug sprintf "Creating %s --%s--> %s",
+	  $subj->sysdesig, $pred, $value_obj->sysdesig;
+
+    }
+
+
+    # validation
+    eval
+    {
+	Rit::Base::Arc->validate_valtype({
+					  subj => $subj,
+					  pred => $pred_obj,
+					  value => $value_obj,
+					 });
+    };
+    if( my $err = catch(['validation']) )
+    {
+	debug $err;
+	debug "*****************************************************";
+    };
+
+
+    my $arc = Rit::Base::Arc->create(\%props);
+
+    my $desc = $rec->{rel_comment};
+    if( defined $desc and length $desc )
+    {
+	$arc->add({description=>$desc});
+    }
+
+    return $TOPIC{$id}{node} = $arc;
+}
+
+
+######################################################################
 
 1;
 
@@ -1875,7 +2782,7 @@ sub setup_db
 #  ipfilter     | ?
 #  mailalias    | !
 #  mailr        | X
-#  media        | -
+#  media        | !
 #  member       | !
 #  memberhost   | X
 #  memo         | X
@@ -1891,8 +2798,8 @@ sub setup_db
 #  score        | ?
 #  slogan       | ?
 #  street       | ?
-#  t            | -
-#  talias       | -
-#  ts           | -
+#  t            | !
+#  talias       | !
+#  ts           | !
 #  zip          | !
 

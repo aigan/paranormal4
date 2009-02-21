@@ -26,6 +26,7 @@ use strict;
 use warnings;
 
 use Carp qw( confess );
+use IO::File;
 
 BEGIN
 {
@@ -38,13 +39,15 @@ use DBI;
 use Carp qw( croak );
 use DateTime::Format::Pg;
 
-use Para::Frame::Utils qw( debug datadump throw validate_utf8 catch );
+use Para::Frame::Utils qw( debug datadump throw validate_utf8 catch create_dir );
 use Para::Frame::Time qw( now );
 
 use Rit::Base::Utils qw( valclean parse_propargs query_desig );
 use Rit::Base::Setup;
 
-our( %TOPIC, %RELTYPE, @AUTOCREATED, $R, $L, $odbix, $class, $individual, $pc_topic, $pc_entry, $pc_featured_topic, $word_plural, $information_store);
+our( %TOPIC, %RELTYPE, @AUTOCREATED, $R, $L, $LOG, $odbix, $class, $individual, $pc_topic, $pc_entry, $pc_featured_topic, $word_plural, $information_store, $mia, $organization, $ia );
+
+sub dlog;
 
 sub setup_db
 {
@@ -88,7 +91,7 @@ sub setup_db
 
 
     my $C_login_account     = $C->get('login_account');
-    my $ia                  = $C->get('intelligent_agent');
+    $ia                  = $C->get('intelligent_agent');
     my $C_predicate         = $C->get('predicate');
     $class                  = $C->get('class');
     my $C_resource          = $C->get('resource');
@@ -118,7 +121,13 @@ sub setup_db
     $req->user->change_current_user( $pc );
 
 
-
+    ### Open log for important notes
+    #
+    create_dir( $Para::Frame::CFG->{'dir_log'} );
+    my $import_log = $Para::Frame::CFG->{'dir_log'}.'/import.log';
+    $LOG = IO::File->new($import_log,">:encoding(UTF-8)") or die "Failed to open $import_log: ".$!;
+    $LOG->autoflush(1);
+    $LOG->print("Started import log ".scalar(localtime)."\n\n");
 
     $R->find_set({
 		  label => 'pc_old_topic_id',
@@ -135,6 +144,8 @@ sub setup_db
 		      label => 'individual',
 		      admin_comment => "Individual is the collection of all individuals: things that are not sets or collections. Individuals might be concrete or abstract, and include (among other things) physical objects, events, numbers, relations, and groups.",
 		      is => $class,
+		      has_cyc_id => 'Individual',
+		      pc_old_topic_id => 715586,
 		     });
 
     $R->find_set({
@@ -154,6 +165,15 @@ sub setup_db
 		 });
 
 
+    $R->find_set({
+		  label => 'quoted_is',
+		  is => $C_predicate,
+		  range => $class,
+		  admin_comment => "Referes to the node rather than the thing represented by the node.",
+		  has_cyc_id => 'quotedIsa',
+		 });
+
+
     $class->add({pc_old_topic_id => 9});
 
 
@@ -169,6 +189,7 @@ sub setup_db
 		      admin_comment => "The collection of all things that have a spatial extent or location relative to some other SpatialThing or in some embedding space. Note that to say that an entity is a member of this collection is to remain agnostic about two issues. First, a SpatialThing may be PartiallyTangible (e.g. Texas-State) or wholly Intangible (e.g. ArcticCircle or a line mentioned in a geometric theorem). Second, although we do insist on location relative to another spatial thing or in some embedding space, a SpatialThing might or might not be located in the actual physical universe.",
 		      has_cyc_id => 'SpatialThing',
 		      scof => $individual,
+		      pc_old_topic_id => 715395,
 		     });
 
     my $temporal_thing
@@ -177,6 +198,14 @@ sub setup_db
 		      admin_comment => "This is the collection of all things that have temporal extent or location -- things about which one might sensibly ask 'When?'. TemporalThing thus contains many kinds of things, including events, physical objects, agreements, and pure intervals of time.",
 		      has_cyc_id => 'TemporalThing',
 		      scof => $individual,
+		     });
+
+    my $time_interval
+      = $R->find_set({
+		      label => 'time_interval',
+		      admin_comment => "Includes timeintervals like seasons and timepoints like now",
+		      has_cyc_id => 'TimeInterval',
+		      scof => $temporal_thing,
 		     });
 
     my $temporal_stuff_type
@@ -202,6 +231,35 @@ sub setup_db
 		      admin_comment => "AspatialInformationStore is the collection of all information stores that have no spatial location. Specializations of AspatialInformationStore include ConceptualWork, Microtheory, AbstractInformationStructure, and FieldOfStudy.",
 		      has_cyc_id => 'AspatialInformationStore',
 		      scof => $information_store,
+		      pc_old_topic_id => 710042,
+		     });
+
+    # AbstractStructure genls AspatialInformationStore.
+    # ContextualizedInformationStructure genls AbstractStructure.
+    # AbstractInformationStructure genls AbstractStructure.
+    # AbstractVisualStructure genls AbstractStructure.
+    # GraphicalStructure genls AbstractVisualStructure.
+    # GraphicalAIS genls GraphicalStructure.
+    # ComputerAIS genls AbstractInformationStructure.
+    # LexicalItem genls AbstractInformationStructure
+
+
+    my $abis
+      = $R->find_set({
+		      label => 'abis',
+		      admin_comment => "Each instance of AbstractInformationStructure is an abstract individual comprising abstract symbols and relations between them. ABIS includes CharacterString, Sentence, abstract diagrams, graphs, and bit strings.",
+		      has_cyc_id => 'AbstractInformationStructure',
+		      scof => $ais,
+		      pc_old_topic_id => 713793,
+		     });
+
+    my $graphical_ais
+      = $R->find_set({
+		      label => 'graphical_ais',
+		      admin_comment => "the collection of all abstract graphical structures that consist of abstract symbols and the relations between them. Each instance of AbstractVisualStructure (AVS) is a structure that can be discerned visually. Any concrete instantiation of a given AVS consists of a particular spatial (or spatio-temporal) arrangement of shapes and/or colors. A given AVS might have multiple instantiations. By the same token, a given concrete visual arrangment (appearing, say, on a sheet of paper or a computer monitor screen) might simultaneously instantiate multiple AVSs, corresponding to different degrees of abstractness.",
+		      has_cyc_id => 'GraphicalAIS',
+		      scof => $abis,
+		      pc_old_topic_id => 713792,
 		     });
 
     my $field_of_study
@@ -213,8 +271,32 @@ sub setup_db
 		      pc_old_topic_id => 3719,
 		     });
 
+    my $belief_system
+      = $R->find_set({
+		      label => 'belief_system',
+		      admin_comment => "A specialization of AspatialInformationStore. Each instance of BeliefSystem is an ideology (systems of belief) in terms of which an agent characterizes (i.e., makes sense of) the world. Instances of BeliefSystem include: Vegetarianism, GermanNaziIdeology, RepublicanPartyIdeology, Communism, Pacifism, Atheism, etc.",
+		      has_cyc_id => 'BeliefSystem',
+		      scof => $ais,
+		      pc_old_topic_id => 387298,
+		     });
 
+    my $hypotheis
+      = $R->find_set({
+		      label => 'hypothesis',
+		      scof => $ais,
+		      pc_old_topic_id => 133761,
+		     });
 
+    my $situation
+      = $R->find_set({
+		      label => 'situation',
+		      admin_comment => "A temporally extended intangible individual. Examples: Gesture, Miracle, Event",
+		      has_cyc_id => 'Situation',
+		      scof => $temporal_thing,
+		      pc_old_topic_id => 81959,
+		     });
+
+    # MentalSituation, MentalState, Consciousness, IntentionalMentalSituation
 
     # See also FieldOfStudy, BeliefSystem, Dream, Meme
 
@@ -242,8 +324,9 @@ sub setup_db
       = $R->find_set({
 		      label => 'media',
 		      admin_comment => "Each instance of MediaProduct is an information store created for the purposes of media distribution (see MediaTransferEvent). Specializations of MediaProduct include RecordedVideoProduct, MediaSeriesProduct, WorldWideWebSite and NewsArticle.",
-		      scof => [ $information_store, $temporal_thing],
+		      scof => [ $information_store, $temporal_thing, $temporal_stuff_type],
 		      has_cyc_id => 'MediaProduct',
+		      pc_old_topic_id => 710085,
 		     });
 
     my $cw
@@ -267,7 +350,7 @@ sub setup_db
 
 ###########################################
 
-    my $all_abbstract
+    my $all_abstract
       = $R->find_set({
 		      label => 'all_abstract',
 		      is => $spatial_thing,
@@ -276,26 +359,27 @@ sub setup_db
 		      pc_old_topic_id => 75908,
 		     });
 
-    my $psychological_phenomenon
-      = $R->find_set({
-		      label => 'pct_psychological_phenomenon',
-		      scof => $individual,
-		      pc_old_topic_id => 3318,
-		     });
-
-     my $thought
-      = $R->find_set({
-		      label => 'pct_thought',
-		      scof => $psychological_phenomenon,
-		      pc_old_topic_id => 148549,
-		      has_wikipedia_id => 'Thought',
-		     });
-
-    my $perspective
-      = $R->find_set({
-		      label => 'pct_perspective',
-		      scof => $thought,
-		     });
+# ... remodel...
+#    my $psychological_phenomenon
+#      = $R->find_set({
+#		      label => 'pct_psychological_phenomenon',
+#		      scof => $individual,
+#		      pc_old_topic_id => 3318,
+#		     });
+#
+#     my $thought
+#      = $R->find_set({
+#		      label => 'pct_thought',
+#		      is => $psychological_phenomenon,
+#		      pc_old_topic_id => 148549,
+#		      has_wikipedia_id => 'Thought',
+#		     });
+#
+#    my $perspective
+#      = $R->find_set({
+#		      label => 'pct_perspective',
+#		      scof => $thought,
+#		     });
 
     my $physical_organism
       = $R->find_set({
@@ -314,7 +398,10 @@ sub setup_db
 		      scof => $temporal_thing,
 		     });
 
-    $ia->add({scof => [$information_store, $agent_generic] });
+    $ia->add({
+	      scof => [$information_store, $agent_generic],
+	      pc_old_topic_id => 715488,
+	     });
 
     my $legal_agent
       = $R->find_set({
@@ -334,7 +421,15 @@ sub setup_db
 		      has_wikipedia_id => 'Person',
 		     });
 
-    my $mia
+    my $life_form
+      = $R->find_set({
+		      label => 'life_form',
+		      admin_comment => "Any living organism in abstract sense, including non-material non-localized life forms",
+		      scof => $agent_generic,
+		      pc_old_topic_id => 398,
+		     });
+
+    $mia
       = $R->find_set({
 		      label => 'mia',
 		      admin_comment => "MultiIndividualAgent. A type of Agent-Generic that may or may not be intelligent. Usually constitutes some type of group, such as a LegalCorporation, CrowdOfPeople or Organization",
@@ -343,7 +438,7 @@ sub setup_db
 		      scof => $agent_generic,
 		     });
 
-    my $organization
+    $organization
       = $R->find_set({
 		      label => 'organization',
 		      admin_comment => "The collection of groups of IntelligentAgents whose members operate together to form a kind of collective. Groups of this sort satisfy the minimal condition for intelligent agency, viz., they are capable of acting purposefully",
@@ -1166,6 +1261,17 @@ sub setup_db
 #
 #
 
+    $R->find_set({
+		  label => 'cia',
+		  is => $C_predicate,
+		  domain => $media,
+		  range => $C_resource,
+		  has_cyc_id => 'containsInformationAbout',
+		  admin_comment => "Contains information about. Old TS. This predicate relates sources of information to their topics.",
+		 });
+    # See also containsInformation
+    # containsInfoPropositional-IBT
+    # propositionalInfoAbout
 
 
 
@@ -1185,10 +1291,15 @@ sub setup_db
 
     my $arctype_map =
     {
-     0 => 'see_also',
+     0 => 'related',
      1 => 'is',
      2 => 'scof',
-     3 => 'iso',
+     3 => [
+	   {
+	    pred => 'broader',
+	    has_cyc_id => 'generalizations',
+	   },
+	  ],
      4 => [
 	   {
 	    pred => 'topic_according_to',
@@ -1202,10 +1313,20 @@ sub setup_db
 	   },
 	  ],
      5 => undef,
-     6 => ['excerpt_from', $C_text, $cw],
+     6 => ['excerpt_from', $media, $cw],
      7 => ['member_of', $person, $mia],
-     8 => ['original_creator', $cw, $ia],
-     9 => ['has_source', $ais, $cw],
+     8 => ['original_creator', $information_store, $ia],
+     9 => [
+	   {
+	    pred => 'has_source',
+	    domain => $ais,
+	    range => $cw,
+	   },
+	   {
+	    rev => 1,
+	    pred => 'cia',
+	   },
+	  ],
      10 => [
 	    {
 	     pred => 'always_offered_by',
@@ -1216,7 +1337,7 @@ sub setup_db
 	     range => $ia,
 	    },
 	   ],
-     11 => ['compares', $perspective, undef],
+     11 => 'compares',
      12 => [
 	    {
 	     pred => 'interested_in',
@@ -1295,7 +1416,18 @@ sub setup_db
 	     range => $practisable,
 	    },
 	   ],
-     35 => ['has_experienced', $ia, $experiencable],
+     35 => [
+	    {
+	     pred => 'has_experienced',
+	     domain => $ia,
+	     range => $experiencable,
+	    },
+	    {
+	     pred => 'allways_experienced',
+	     domain_scof => $ia,
+	     range => $experiencable,
+	    },
+	   ],
      36 => 'is_influenced_by',
      37 => ['based_upon', $media, $media],
      38 => ['has_epithet', $individual, $individual],
@@ -1319,6 +1451,14 @@ sub setup_db
      45 => ['has_owner', $temporal_thing, $legal_agent],
      46 => undef,
      47 => ['uses', $temporal_stuff_type, $temporal_stuff_type],
+     48 => [
+	    {
+	     pred => 'instances_are_part_of',
+	     domain => $individual,
+	     range => $class,
+	     range_scof => $individual,
+	    },
+	   ],
     };
 
     my $ortl = $odbix->select_key('reltype','from reltype');
@@ -1332,7 +1472,7 @@ sub setup_db
 	    $defs = [$defs];
 	}
 
-	my( @preds );
+	my( @preds_rel, @preds_rev );
 
 	unless( ref $defs->[0] )
 	{
@@ -1405,10 +1545,21 @@ sub setup_db
 		$pred->add({ name_rev => $name_rev });
 	    }
 
-	    push @preds, $pred;
+	    if( $def->{'rev'} )
+	    {
+		push @preds_rev, $pred;
+	    }
+	    else
+	    {
+		push @preds_rel, $pred;
+	    }
 	}
 
-	$RELTYPE{ $rtid } = \@preds;
+	$RELTYPE{ $rtid } =
+	{
+	 rel => \@preds_rel,
+	 rev => \@preds_rev,
+	};
     }
 
 
@@ -2005,17 +2156,6 @@ sub setup_db
 		  admin_comment => "Old t.t_connected",
 		 });
 
-    $R->find_set({
-		  label => 'cia',
-		  is => $C_predicate,
-		  domain => $media,
-		  range => $C_resource,
-		  has_cyc_id => 'containsInformationAbout',
-		  admin_comment => "Contains information about. Old TS. This predicate relates sources of information to their topics.",
-		 });
-    # See also containsInformation
-    # containsInfoPropositional-IBT
-    # propositionalInfoAbout
 
 
     # Adding main parent
@@ -2192,7 +2332,7 @@ sub setup_db
       = $R->find_set({
 		      label => 'computer_file_ais',
 		      admin_comment => "Each instance of ComputerFile-AIS is an abstract series of bits encoding some information and conforming to some file system protocol.",
-		      scof => $ais,
+		      scof => $abis,
 		      has_cyc_id => 'ComputerFile-AIS',
 		     });
 
@@ -2348,6 +2488,21 @@ sub setup_db
 
 
 
+#    ### TIME-TEST
+#    #
+#    my $pred_obj = $C->get('has_start_date');
+#    my $value_obj = Rit::Base::Resource->
+#      get_by_anything( '1875 ',
+#		       {
+#			valtype => $C_date,
+#			pred_new => $pred_obj,
+#		       });
+#
+#    debug $value_obj->sysdesig;
+#    debug $value_obj->datetime;
+#    debug $dbix->format_datetime($value_obj);
+#    die "HERE";
+
 
 
 
@@ -2375,13 +2530,18 @@ sub setup_db
 	$R->commit;
 
 	debug "======= retrieving list of all topics and rels";
-	my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t >= 35830 and t_entry is false order by t');
+	my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t >= 0 and t_entry is false order by t');
 	my( $rec, $error ) = $list->get_first;
 	while(! $error )
 	{
 	    if( my $n = import_topic_main( $rec->{'t'}, $rec ) )
 	    {
 		import_topic_arcs( $n );
+	    }
+
+	    unless( $list->index % 100 )
+	    {
+		dlog sprintf "==== %7d", $list->index;
 	    }
 	}
 	continue
@@ -2504,7 +2664,7 @@ sub import_topic_main
     {
 	if( $t_status == 5 )
 	{
-	    push @{$prop{is}}, $pc_featured_topic;
+	    push @{$prop{quoted_is}}, $pc_featured_topic;
 	}
     }
 
@@ -2714,8 +2874,7 @@ sub import_topic_arcs
 
     if( $n->{p4_imported_arcs_partial} )
     {
-	debug "**** Partially imported arcs for";
-	debug "**** ".$n->sysdesig;
+	dlog "**** Partially imported arcs for ".$n->sysdesig;
 	return;
     }
 
@@ -2723,8 +2882,10 @@ sub import_topic_arcs
 
     $n->{p4_imported_arcs_partial} = 1;
 
+    import_topic_arcs_primary( $n );
+
     # In order to bootstrap, start with is and scof
-    my $list = $odbix->select_list('from rel where rel_active is true and rel_indirect is false and rel_strength >= 30 and rev=? order by rel_type', $n->pc_old_topic_id->plain);
+    my $list = $odbix->select_list('from rel where rel_active is true and rel_indirect is false and rel_strength >= 30 and rel_type > 2 and rev=? order by rel_type', $n->pc_old_topic_id->plain);
 
     my( $rec, $error ) = $list->get_first;
     while(! $error )
@@ -2749,6 +2910,48 @@ sub import_topic_arcs
 
 ######################################################################
 
+sub import_topic_arcs_primary
+{
+    my( $n ) = @_;
+
+    return if $n->{p4_imported_arcs_primary};
+
+    if( $n->{p4_imported_arcs_primary_partial} )
+    {
+	dlog "**** Partially imported primary arcs for ".$n->sysdesig;
+	return;
+    }
+
+    debug "initiating ".$n->sysdesig;
+
+    $n->{p4_imported_arcs_primary_partial} = 1;
+
+    # In order to bootstrap, start with is and scof
+    my $list = $odbix->select_list('from rel where rel_active is true and rel_indirect is false and rel_strength >= 30 and rel_type < 3 and rev=? order by rel_type', $n->pc_old_topic_id->plain);
+
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	import_topic_arc( $rec );
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+
+    unless( $list->size )
+    {
+	debug $n->sysdesig." has no rels";
+    }
+
+    debug "INITIATED  ".$n->sysdesig;
+
+    $n->{p4_imported_arcs_primary} = 1;
+}
+
+
+######################################################################
+
 sub import_topic_arc
 {
     my( $rec ) = @_;
@@ -2756,76 +2959,123 @@ sub import_topic_arc
     my $id = $rec->{rel_topic};
     return $TOPIC{$id}{node} if $TOPIC{$id};
 
-    my $subj = import_topic( $rec->{rev} );
-    return unless $subj;
+    my $subj_in = import_topic( $rec->{rev} );
+    return unless $subj_in;
 
-    my $preds = $RELTYPE{ $rec->{rel_type} };
-    return unless $preds; # unhandled reltype
+    my $predaltsh = $RELTYPE{ $rec->{rel_type} };
+    return unless $predaltsh; # unhandled reltype
+
+    my $errmsg = "";
 
     my @preds; # choosen pred
-    foreach my $alt_pred ( @$preds )
+
+    foreach my $dir ( 'rel', 'rev' )
     {
-	if( $alt_pred->plain eq 'scof' )
-	{
-	    # Bootstraping
-	    push @preds, $alt_pred;
-	}
-	elsif( my $domain = $alt_pred->domain )
-	{
-	    debug "  domain of ".$alt_pred->plain.
-	      " is ".$domain->sysdesig;
-	    if( $subj->has_value({is=>$domain}) )
-	    {
-		push @preds, $alt_pred;
-	    }
-	    else
-	    {
-		debug "  Subj ".$subj->sysdesig.
-		  " not in the right domain for ".$alt_pred->plain;
-		debug "  is for subj is ".$subj->is->sysdesig;
-	    }
-	}
-	elsif( my $domain_scof = $alt_pred->domain_scof )
-	{
-	    debug "  domain_scof of ".$alt_pred->plain.
-	      " is ".$domain_scof->sysdesig;
+	my $rev = (($dir eq 'rev')? 1 : 0 );
 
-	    if( $subj->has_value({scof=>$domain_scof}) )
-	    {
-		push @preds, $alt_pred;
-	    }
-	    else
-	    {
-		debug "  Subj ".$subj->sysdesig.
-		  " not in the right domain_scof for ".$alt_pred->plain;
-
-		debug "  scof for subj is ".$subj->scof->sysdesig;
-	    }
+	my( $subj, $obj );
+	if( $rev )
+	{
+	    $subj = import_topic( $rec->{rel} );
+	    return unless $subj;
+	    import_topic_arcs_primary( $subj );
 	}
 	else
 	{
-	    push @preds, $alt_pred;
+	    $subj = $subj_in;
+	}
+
+
+	foreach my $alt_pred ( @{$predaltsh->{$dir}} )
+	{
+	    if( $alt_pred->plain eq 'scof' )
+	    {
+		# Bootstraping
+		push @preds, [$alt_pred, $rev];
+	    }
+	    elsif( my $domain = $alt_pred->domain )
+	    {
+		$errmsg .= "  domain of ".$alt_pred->plain.
+		  " is ".$domain->sysdesig."\n";
+
+		if( $domain->equals($information_store) and
+		    $subj->has_value({is=>$mia}) and
+		    not $subj->has_value({is=>$domain}) )
+		{
+		    dlog "AUTOCREATING organization for ".$subj->sysdesig;
+		    push  @AUTOCREATED, $subj->add_arc({is => $organization});
+		}
+
+
+		if( $subj->has_value({is=>$domain}) )
+		{
+		    push @preds, [$alt_pred, $rev];
+		}
+		else
+		{
+		    $errmsg .=  "  Subj ".$subj->sysdesig.
+		      " not in the right domain for ".$alt_pred->plain."\n";
+		    $errmsg .= "  is for subj is ".$subj->is->sysdesig."\n";
+		}
+	    }
+	    elsif( my $domain_scof = $alt_pred->domain_scof )
+	    {
+		$errmsg .= "  domain_scof of ".$alt_pred->plain.
+		  " is ".$domain_scof->sysdesig."\n";
+
+		if( $subj->has_value({scof=>$domain_scof}) )
+		{
+		    push @preds, [$alt_pred, $rev];
+		}
+		else
+		{
+		    $errmsg .= "  Subj ".$subj->sysdesig.
+		      " not in the right domain_scof for ".$alt_pred->plain."\n";
+
+		    $errmsg .= "  scof for subj is ".$subj->scof->sysdesig."\n";
+		}
+	    }
+	    else
+	    {
+		push @preds, [$alt_pred, $rev];
+	    }
 	}
     }
 
     unless( @preds )
     {
-	debug "No valid pred found for rel_topic ". $rec->{rel_topic};
-	confess sprintf "  %s --R%d--> %s %s",
-	  $subj->sysdesig, $rec->{rel_type}, ($rec->{rel}||''), ($rec->{rel_value}||'');
+	dlog "!!!! No valid pred found for rel_topic ". $rec->{rel_topic};
+	dlog $errmsg;
+#	confess sprintf "  %s --R%d--> %s %s",
+#	  $subj->sysdesig, $rec->{rel_type}, ($rec->{rel}||''), ($rec->{rel_value}||'');
+	return;
     }
 
     if( @preds > 1 )
     {
-	debug "  Considering alternative preds";
-	debug "  ".$preds[0]->plain;
-	debug "  ".$preds[1]->plain;
+	$errmsg .= "  Considering alternative preds\n";
+	$errmsg .= "  ".$preds[0][0]->plain."\n";
+	$errmsg .= "  ".$preds[1][0]->plain."\n";
     }
 
 
-    foreach my $pred_obj ( @preds )
+    foreach my $predl ( @preds )
     {
+	my $pred_obj = $predl->[0];
 	my $pred = $pred_obj->plain;
+	my $rev = $predl->[1];
+
+	my( $subj, $value_obj );
+	if( $rev )
+	{
+	    $subj = import_topic( $rec->{rel} );
+	    $value_obj  = $subj_in;
+	}
+	else
+	{
+	    $subj = $subj_in;
+	}
+
 
 ###	my $created_by = $R->get({pc_member_id => $rec->{'rel_createdby'}});
 
@@ -2839,18 +3089,17 @@ sub import_topic_arc
 	  );
 
 
-	my $value_obj;
 	if( $pred_obj->objtype )
 	{
-	    my $obj = import_topic( $rec->{rel} );
+	    my $obj = $value_obj || import_topic( $rec->{rel} );
 	    return unless $obj;
 
 	    debug sprintf "Creating %s --%s--> %s",
 	      $subj->sysdesig, $pred, $obj->sysdesig;
 
-	    unless( $pred eq 'see_also' ) ### Loopy critters
+	    unless( $pred eq 'related' ) ### Loopy critters
 	    {
-		import_topic_arcs( $obj );
+		import_topic_arcs_primary( $obj );
 	    }
 
 	    # Automaticly making the obj a class if acting like one
@@ -2859,7 +3108,7 @@ sub import_topic_arc
 	    {
 		unless( $obj->has_value({is => $class}) )
 		{
-		    debug " AUTOCREATING class";
+		    dlog "AUTOCREATING class for ".$obj->sysdesig;
 		    push  @AUTOCREATED, $obj->add_arc({is => $class});
 		}
 	    }
@@ -2869,22 +3118,29 @@ sub import_topic_arc
 		{
 		    unless( $class->has_value({scof => $individual}) )
 		    {
-			debug " AUTOCREATING class-individual";
+			dlog "AUTOCREATING class-individual for ".$obj->sysdesig;
 			push  @AUTOCREATED, $class->add_arc({scof => $individual});
 		    }
 		}
 
 		unless( $obj->has_value({is => $individual}) )
 		{
-		    debug " AUTOCREATING individual";
+		    dlog "AUTOCREATING individual for ".$obj->sysdesig;
 		    push  @AUTOCREATED, $obj->add_arc({is => $individual});
 		}
+	    }
+	    elsif( $pred_obj->valtype->equals($ia) and
+		   $obj->has_value({is => $mia}) and
+		   not $obj->has_value({is => $ia}) )
+	    {
+		push  @AUTOCREATED, $obj->add_arc({is => $organization});
+		# See Saffron Walden
 	    }
 	    elsif( $pred_obj->valtype->equals($information_store) )
 	    {
 		unless( $obj->has_value({is => $information_store}) )
 		{
-		    debug " AUTOCREATING information_store";
+		    dlog "AUTOCREATING information_store for ".$obj->sysdesig;
 		    push  @AUTOCREATED, $obj->add_arc({is => $information_store});
 		}
 	    }
@@ -2922,15 +3178,18 @@ sub import_topic_arc
 	};
 	if( my $err = catch(['validation']) )
 	{
-	    if( $pred_obj eq $preds->[-1] )
+	    if( $pred_obj eq $preds[-1][0] )
 	    {
-		die $err;
+		dlog $errmsg;
+		dlog $err;
+		return;
 #		debug "*****************************************************";
 	    }
 	    else
 	    {
 		debug $err;
-		next; ### Try next pred
+		debug "Trying next pred";
+		next;
 	    }
 	};
 
@@ -2946,6 +3205,15 @@ sub import_topic_arc
     }
 
     return;
+}
+
+
+######################################################################
+
+sub dlog
+{
+    my $msg = debug(@_);
+    $LOG->print($msg);
 }
 
 

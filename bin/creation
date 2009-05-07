@@ -1,8 +1,5 @@
-#!/usr/bin/perl -w
-#  $Id$  -*-cperl-*-
-
-
-#=====================================================================
+#!/usr/bin/perl
+#==================================================== -*- cperl -*- ==========
 #
 # DESCRIPTION
 #   Paranormal.se creation
@@ -11,20 +8,22 @@
 #   Jonas Liljegren   <jonas@paranormal.se>
 #
 # COPYRIGHT
-#   Copyright (C) 2004-2007 Jonas Liljegren.  All Rights Reserved.
+#   Copyright (C) 2004-2009 Jonas Liljegren.  All Rights Reserved.
 #
 #   This module is free software; you can redistribute it and/or
 #   modify it under the same terms as Perl itself.
 #
-#=====================================================================
+#=============================================================================
 
+use 5.010;
+use strict;
+use warnings;
+
+our $VERSION = "4.01"; # Paraframe version
 our $CFG;
 
 BEGIN
 {
-    our $VERSION  = sprintf("%d.%02d", q$Revision$ =~ /(\d+)\.(\d+)/);
-    print "Starting creation $VERSION\n";
-
     use FindBin;
     my $configfile = $FindBin::Bin . "/../etc/server.conf";
 
@@ -37,7 +36,6 @@ BEGIN
     push @INC, $CFG->{'email_classifier'}. '/lib';
 }
 
-use strict;
 use locale;
 
 use Data::Dumper;
@@ -242,9 +240,9 @@ use Para::User::Meta;
     if( $ARGV[0] and not looks_like_number($ARGV[0]) )
     {
 	Para::Frame->startup;
-	Para::Frame::main_loop() if $ARGV[0] eq 'no_watchdog';
+	Para::Frame::start_loop() if $ARGV[0] eq 'no_watchdog';
 	print "Server stops\n";
-	Para::Frame->go_down;
+	Para::Frame->kill_children;
 	exit;
     }
 
@@ -258,4 +256,4 @@ use Para::User::Meta;
     }
 }
 
-#########################################################
+##############################################################################

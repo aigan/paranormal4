@@ -1,5 +1,16 @@
-#  $Id$  -*-cperl-*-
 package Para::User;
+#==================================================== -*- cperl -*- ==========
+#
+# AUTHOR
+#   Jonas Liljegren   <jonas@paranormal.se>
+#
+# COPYRIGHT
+#   Copyright (C) 2005-2009 Jonas Liljegren.  All Rights Reserved.
+#
+#   This module is free software; you can redistribute it and/or
+#   modify it under the same terms as Perl itself.
+#
+#=============================================================================
 
 =head1 NAME
 
@@ -7,14 +18,9 @@ Para::User
 
 =cut
 
+use 5.010;
 use strict;
-
-BEGIN
-{
-    our $VERSION  = sprintf("%d.%02d", q$Revision$ =~ /(\d+)\.(\d+)/);
-    print "Loading ".__PACKAGE__." $VERSION\n";
-}
-
+use warnings;
 use base qw(Rit::Base::User);
 
 use Para::Frame::Reload;
@@ -25,7 +31,7 @@ use Rit::Base::User;
 use Rit::Base::Constants qw( $C_login_account $C_guest_access );
 use Rit::Base::Literal::Time qw( now );
 
-#######################################################################
+##############################################################################
 #
 #=head2 get
 #
@@ -61,7 +67,7 @@ use Rit::Base::Literal::Time qw( now );
 #    return $this->Rit::Base::User::get($username, $args);
 #}
 #
-#######################################################################
+##############################################################################
 #
 #=head2 level
 #
@@ -88,7 +94,7 @@ use Rit::Base::Literal::Time qw( now );
 #}
 #
 #
-#######################################################################
+##############################################################################
 #
 #=head2 after_user_login
 #
@@ -124,7 +130,7 @@ use Rit::Base::Literal::Time qw( now );
 #
 #}
 #
-#######################################################################
+##############################################################################
 
 =head2 has_page_update_access
 
@@ -163,8 +169,6 @@ sub has_page_update_access
     return 0;
 }
 
-#######################################################################
-
-
+##############################################################################
 
 1;

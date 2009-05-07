@@ -1,6 +1,5 @@
-#  $Id$  -*-cperl-*-
 package Para::Setup;
-#=====================================================================
+#==================================================== -*- cperl -*- ==========
 #
 # DESCRIPTION
 #   Paranormal Database Setup
@@ -14,7 +13,7 @@ package Para::Setup;
 #   This module is free software; you can redistribute it and/or
 #   modify it under the same terms as Perl itself.
 #
-#=====================================================================
+#=============================================================================
 
 =head1 NAME
 
@@ -22,18 +21,12 @@ Para::Setup
 
 =cut
 
+use 5.010;
 use strict;
 use warnings;
 
 use Carp qw( confess );
 use IO::File;
-
-BEGIN
-{
-    our $VERSION  = sprintf("%d.%02d", q$Revision$ =~ /(\d+)\.(\d+)/);
-    print "Loading ".__PACKAGE__." $VERSION\n";
-}
-
 use utf8;
 use DBI;
 use Carp qw( croak );
@@ -45,7 +38,7 @@ use Para::Frame::Time qw( now );
 use Rit::Base::Utils qw( valclean parse_propargs query_desig );
 use Rit::Base::Setup;
 
-our( %TOPIC, %RELTYPE, @AUTOCREATED, $R, $L, $LOG, $odbix, $class, $individual, $pc_topic, $pc_entry, $pc_featured_topic, $word_plural, $information_store, $mia, $organization, $ia );
+our( %TOPIC, %RELTYPE, @AUTOCREATED, $R, $L, $LOG, $odbix, $class, $individual, $pc_topic, $pc_entry, $pc_featured_topic, $word_plural, $information_store, $mia, $organization, $ia, $practisable );
 
 sub dlog;
 
@@ -176,6 +169,7 @@ sub setup_db
 
     $class->add({pc_old_topic_id => 9});
 
+    $C_language->add({pc_old_topic_id => 33859});
 
 
     #
@@ -198,6 +192,7 @@ sub setup_db
 		      admin_comment => "This is the collection of all things that have temporal extent or location -- things about which one might sensibly ask 'When?'. TemporalThing thus contains many kinds of things, including events, physical objects, agreements, and pure intervals of time.",
 		      has_cyc_id => 'TemporalThing',
 		      scof => $individual,
+		      pc_old_topic_id => 717756,
 		     });
 
     my $time_interval
@@ -319,23 +314,24 @@ sub setup_db
 		      scof => $information_store,
 		      is => $temporal_stuff_type,
 		     });
-
-    my $media
-      = $R->find_set({
-		      label => 'media',
-		      admin_comment => "Each instance of MediaProduct is an information store created for the purposes of media distribution (see MediaTransferEvent). Specializations of MediaProduct include RecordedVideoProduct, MediaSeriesProduct, WorldWideWebSite and NewsArticle.",
-		      scof => [ $information_store, $temporal_thing, $temporal_stuff_type],
-		      has_cyc_id => 'MediaProduct',
-		      pc_old_topic_id => 710085,
-		     });
-
     my $cw
       = $R->find_set({
 		      label => 'cw',
 		      admin_comment => "ConceptualWork: A specialization of AspatialInformationStore. Each instance of ConceptualWork is a partially abstract work (in the sense that each instance has a beginning in time, but lacks a location in space) which either has an associated AbstractInformationStructure (q.v.) or has a version with an associated AbstractInformationStructure. Conceptual works or versions of conceptual works can be instantiated in instances of InformationBearingThing (q.v.); every such instantiation of a conceptual work will also be an instantiation of an instance of AbstractInformationStructure. Notable specializations of ConceptualWork include ComputerProgram-CW, VisualWork, and Book-CW.",
 		      scof => $ais,
 		      has_cyc_id => 'ConceptualWork',
+		      pc_old_topic_id => 716725,
 		     });
+
+    my $media
+      = $R->find_set({
+		      label => 'media',
+		      admin_comment => "Each instance of MediaProduct is an information store created for the purposes of media distribution (see MediaTransferEvent). Specializations of MediaProduct include RecordedVideoProduct, MediaSeriesProduct, WorldWideWebSite and NewsArticle.",
+		      scof => [ $information_store, $temporal_thing, $temporal_stuff_type, $cw ],
+		      has_cyc_id => 'MediaProduct',
+		      pc_old_topic_id => 710085,
+		     });
+
     # See also possessesCopyOf, instantiationOfWork, instantiationOfAIT
     # !!! ibt instantiationOfWork cw
     # !!! ibt instantiationOfAIT ais
@@ -348,7 +344,7 @@ sub setup_db
     # !!! Collection topicOf Thing
 
 
-###########################################
+##############################################################################
 
     my $all_abstract
       = $R->find_set({
@@ -396,6 +392,7 @@ sub setup_db
 		      admin_comment => "Each instance of Agent-Generic is a being that has desires or intentions, and the ability to act on those desires or intentions. Instances of Agent-Generic may be individuals (see the specialization IndividualAgent) or they may consist of several Agent-Generics operating together (see the specialization MultiIndividualAgent).",
 		      has_cyc_id => 'Agent-Generic',
 		      scof => $temporal_thing,
+		      pc_old_topic_id => 718806,
 		     });
 
     $ia->add({
@@ -511,7 +508,7 @@ sub setup_db
 		      is => $class,
 		     });
 
-    my $practisable
+    $practisable
       = $R->find_set({
 		      label => 'pct_practisable',
 		      admin_comment => "Stuff that an IntelligentAgent can be involved in or use (IntelligentAgentActivity), like therapies, religions or skills",
@@ -623,7 +620,7 @@ sub setup_db
 
 
 
-    ###################################################################
+##############################################################################
 
     # MEMBER
     #
@@ -761,7 +758,7 @@ sub setup_db
 #		   });
 #
 #
-#######################
+##############################################################################
 #
 #
 #    $R->find_set({
@@ -1264,7 +1261,7 @@ sub setup_db
     $R->find_set({
 		  label => 'cia',
 		  is => $C_predicate,
-		  domain => $media,
+		  domain => $ais,
 		  range => $C_resource,
 		  has_cyc_id => 'containsInformationAbout',
 		  admin_comment => "Contains information about. Old TS. This predicate relates sources of information to their topics.",
@@ -1314,7 +1311,7 @@ sub setup_db
 	  ],
      5 => undef,
      6 => ['excerpt_from', $media, $cw],
-     7 => ['member_of', $person, $mia],
+     7 => ['member_of', $agent_generic, $mia],
      8 => ['original_creator', $information_store, $ia],
      9 => [
 	   {
@@ -1346,6 +1343,9 @@ sub setup_db
 	    {
 	     pred => 'allways_interested_in',
 	     domain_scof => $agent_generic,
+	    },
+	    {
+	     pred => 'cia',
 	    },
 	   ],
      13 => ['published_date', $media, $C_date],
@@ -1450,13 +1450,12 @@ sub setup_db
      44 => ['instance_owned_by', $temporal_stuff_type, $legal_agent],
      45 => ['has_owner', $temporal_thing, $legal_agent],
      46 => undef,
-     47 => ['uses', $temporal_stuff_type, $temporal_stuff_type],
+     47 => ['uses', $temporal_stuff_type],
      48 => [
 	    {
 	     pred => 'instances_are_part_of',
-	     domain => $individual,
-	     range => $class,
-	     range_scof => $individual,
+	     domain => $class,
+	     range => $individual,
 	    },
 	   ],
     };
@@ -2561,7 +2560,7 @@ sub setup_db
 }
 
 
-######################################################################
+##############################################################################
 
 sub tree_entry
 {
@@ -2598,7 +2597,7 @@ sub tree_entry
 }
 
 
-######################################################################
+##############################################################################
 
 sub import_topic_main
 {
@@ -2722,7 +2721,7 @@ sub import_topic_main
 }
 
 
-######################################################################
+##############################################################################
 
 sub import_topic_parent
 {
@@ -2749,7 +2748,7 @@ sub import_topic_parent
 }
 
 
-######################################################################
+##############################################################################
 
 sub import_topic_entries
 {
@@ -2809,7 +2808,7 @@ sub import_topic_entries
 }
 
 
-######################################################################
+##############################################################################
 
 sub import_topic
 {
@@ -2834,7 +2833,7 @@ sub import_topic
 }
 
 
-######################################################################
+##############################################################################
 
 sub import_childs
 {
@@ -2864,7 +2863,7 @@ sub import_childs
 }
 
 
-######################################################################
+##############################################################################
 
 sub import_topic_arcs
 {
@@ -2874,7 +2873,7 @@ sub import_topic_arcs
 
     if( $n->{p4_imported_arcs_partial} )
     {
-	dlog "**** Partially imported arcs for ".$n->sysdesig;
+	debug "**** Partially imported arcs for ".$n->sysdesig;
 	return;
     }
 
@@ -2908,7 +2907,7 @@ sub import_topic_arcs
 }
 
 
-######################################################################
+##############################################################################
 
 sub import_topic_arcs_primary
 {
@@ -2918,7 +2917,7 @@ sub import_topic_arcs_primary
 
     if( $n->{p4_imported_arcs_primary_partial} )
     {
-	dlog "**** Partially imported primary arcs for ".$n->sysdesig;
+	debug "**** Partially imported primary arcs for ".$n->sysdesig;
 	return;
     }
 
@@ -2950,7 +2949,7 @@ sub import_topic_arcs_primary
 }
 
 
-######################################################################
+##############################################################################
 
 sub import_topic_arc
 {
@@ -3002,10 +3001,20 @@ sub import_topic_arc
 		    $subj->has_value({is=>$mia}) and
 		    not $subj->has_value({is=>$domain}) )
 		{
-		    dlog "AUTOCREATING organization for ".$subj->sysdesig;
+		    dlog "AUTOCREATING organization1 for ".$subj->sysdesig;
 		    push  @AUTOCREATED, $subj->add_arc({is => $organization});
 		}
 
+		if( $domain->equals($organization) and
+		    $subj->has_value({is=>$mia}) and
+		    not $subj->has_value({is=>$domain}) )
+		{
+		    dlog "AUTOCREATING organization2 for ".$subj->sysdesig;
+		    push  @AUTOCREATED, $subj->add_arc({is => $organization});
+		}
+
+
+		#####################
 
 		if( $subj->has_value({is=>$domain}) )
 		{
@@ -3044,8 +3053,9 @@ sub import_topic_arc
 
     unless( @preds )
     {
-	dlog "!!!! No valid pred found for rel_topic ". $rec->{rel_topic};
+	dlog "/~~~~~ No valid pred found for rel_topic ". $rec->{rel_topic};
 	dlog $errmsg;
+	dlog "\_____";
 #	confess sprintf "  %s --R%d--> %s %s",
 #	  $subj->sysdesig, $rec->{rel_type}, ($rec->{rel}||''), ($rec->{rel_value}||'');
 	return;
@@ -3144,6 +3154,14 @@ sub import_topic_arc
 		    push  @AUTOCREATED, $obj->add_arc({is => $information_store});
 		}
 	    }
+	    elsif( $pred_obj->valtype->equals($practisable) )
+	    {
+		unless( $obj->has_value({is => $practisable}) )
+		{
+		    dlog "AUTOCREATING practisable for ".$obj->sysdesig;
+		    push  @AUTOCREATED, $obj->add_arc({is => $practisable});
+		}
+	    }
 
 	    $props{obj} = $obj->id;
 	    $value_obj = $obj;
@@ -3180,8 +3198,10 @@ sub import_topic_arc
 	{
 	    if( $pred_obj eq $preds[-1][0] )
 	    {
+		dlog "/~~~~~";
 		dlog $errmsg;
 		dlog $err;
+		dlog "\_____";
 		return;
 #		debug "*****************************************************";
 	    }
@@ -3208,7 +3228,7 @@ sub import_topic_arc
 }
 
 
-######################################################################
+##############################################################################
 
 sub dlog
 {
@@ -3217,7 +3237,7 @@ sub dlog
 }
 
 
-######################################################################
+##############################################################################
 
 1;
 

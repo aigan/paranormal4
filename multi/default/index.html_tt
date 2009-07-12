@@ -1,0 +1,55 @@
+  [%
+     topic = item;
+     id = topic.id;
+     topic_is = topic.arc_list('is','',{ arclim => 'adirect' });
+     CALL topic_is.push( topic.arc_list('scof','',{ arclim => 'adirect' }));
+  %]
+
+  [%# Title %]
+  <h1>
+    [% topic.desig | html %]
+    [% IF topic_is %]
+      ([% topic_is.obj.desig %])
+    [% END %]
+  </h1>
+
+  [%# Subtitle %]
+  [% FOREACH arc = t.arc_list('has_subtitle') %]
+    <h2>[% arc.value | html %]</h2>
+  [% END %]
+
+
+  <div id="main">
+    <div id="topic_header">
+      [% IF topic.description %]
+        <p id="description">[% topic.description | html %]</p>
+      [% END %]
+    </div>
+
+    <table>
+      [% FOREACH arc IN topic.arc_list('','',{ arclim => 'adirect' }) %]
+        <tr>
+          <td>
+        $arc.pred.desig
+          </td>
+          <td>
+        [% IF arc.obj %]
+          [% jump(arc.obj.desig, me, id=arc.obj.id) %]
+        [% ELSE %]
+          $arc.value
+        [% END %]
+          </td>
+        </tr>
+      [% END %]
+      [% FOREACH arc IN topic.revarc_list('','',{ arclim => 'adirect' }) %]
+        <tr>
+          <td>
+        [% arc.pred.rev_name || "rev $arc.pred.desig" %]
+          </td>
+          <td>
+        [% jump(arc.subj.desig, me, id=arc.subj.id) %]
+          </td>
+        </tr>
+      [% END %]
+    </table>
+  </div>

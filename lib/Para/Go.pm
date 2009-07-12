@@ -10,12 +10,12 @@ use 5.010;
 use strict;
 use warnings;
 
-use Carp qw( confess );
+use Carp qw( confess cluck );
 use Para::Frame::Reload;
 use Para::Frame::Utils qw( throw catch debug datadump deunicode );
 use Para::Frame::L10N qw( loc );
 
-use Rit::Base::Constants qw( );
+use Rit::Base::Constants qw( $C_pc_topic );
 
 use Rit::Base::Utils qw( valclean parse_propargs query_desig );
 
@@ -52,10 +52,11 @@ sub find
 
 
     # Firstly check for the common case
-    my $target_in = $p->target_with_lang;
+    my $target_in = $p->target_with_lang({ext=>'html'});
     if( $target_in->exist and not $target_in->is_dir )
     {
 	debug "  file exists";
+#	cluck;
 	return $target_in;
     }
 
@@ -83,7 +84,7 @@ sub find
 
     # May change to normal item url
     my $p_tmpl = $item->page_presentation_template($rest, $go_args);
-    my $target = $p_tmpl->target_with_lang;
+    my $target = $p_tmpl->target_with_lang({ext=>'html'});
 
     # Looks for the corresponding template url
     my $file = $target->sys_path;
@@ -142,13 +143,27 @@ sub item_by_path
 
     return undef unless $path;
 
-    debug "  handling path";
+    $path =~ s/\/$/.html/;
 
-    return undef;
+    debug "==== Lookup item by path $path";
+
+    my $args = {};
+    my( $alts ) = Rit::Base::Resource->find({
+					     is=>$C_pc_topic,
+					     pc_public_path => $path,
+					    }, $args);
+
+    return undef unless $alts->size;
+
+    my $item = $alts->get_first_nos;
 
 
-    my $req = $Para::Frame::REQ;
+    debug "Found ".$item->sysdesig;
 
+    return( $item, '', $args, $args);
+
+
+#    my $req = $Para::Frame::REQ;
 #
 #    if( 0 )
 #    {

@@ -63,6 +63,7 @@ use Rit::Base::Site;
 
 use Para;
 use Para::User::Meta;
+use Para::Resource;
 
 
 {
@@ -134,7 +135,7 @@ use Para::User::Meta;
 #     'user_class'      => 'Para::Member::Meta',
      'user_class'      => 'Para::User::Meta',
      'session_class'   => 'Rit::Base::Session',
-#     'resource_class'  => 'Rit::Base::Resource',
+     'resource_class'  => 'Para::Resource',
      'search_collection_class' => 'Rit::Base::Search::Collection',
      'search_result_class'     => 'Rit::Base::Search::Result',
      'l10n_class'      => 'Rit::Base::L10N',

@@ -28,6 +28,7 @@ use Para::Frame::Time qw( now duration );
 use Rit::Base::Utils qw( parse_propargs );
 
 use Para::Setup;
+use Para::Go;
 
 #use Para::Member;
 #use Para::Topic;

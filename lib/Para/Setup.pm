@@ -1450,7 +1450,12 @@ sub setup_db
      44 => ['instance_owned_by', $temporal_stuff_type, $legal_agent],
      45 => ['has_owner', $temporal_thing, $legal_agent],
      46 => undef,
-     47 => ['uses', $temporal_stuff_type],
+     47 => [
+	    {
+	     pred => 'uses',
+	     domain_scof => $temporal_thing,
+	    }
+	   ],
      48 => [
 	    {
 	     pred => 'instances_are_part_of',
@@ -2157,22 +2162,6 @@ sub setup_db
 
 
 
-    # Adding main parent
-    debug "======= Couple imported topics to their parents";
-    foreach my $tid ( keys %TOPIC )
-    {
-	import_topic_parent( $tid );
-    }
-
-    # Adding additional entry tree
-    debug "======= Couple eimported topics to their entries";
-    foreach my $tid ( keys %TOPIC )
-    {
-	import_topic_entries( $tid );
-    }
-
-    debug "======= Topics import done";
-
 
 
 
@@ -2529,7 +2518,7 @@ sub setup_db
 	$R->commit;
 
 	debug "======= retrieving list of all topics and rels";
-	my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t >= 0 and t_entry is false order by t');
+	my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t >= 0 and t_entry is false order by t limit 12');
 	my( $rec, $error ) = $list->get_first;
 	while(! $error )
 	{
@@ -2538,10 +2527,10 @@ sub setup_db
 		import_topic_arcs( $n );
 	    }
 
-	    unless( $list->index % 100 )
-	    {
+#	    unless( $list->index % 10 )
+#	    {
 		dlog sprintf "==== %7d", $list->index;
-	    }
+#	    }
 	}
 	continue
 	{
@@ -2549,6 +2538,25 @@ sub setup_db
 	}
     };
 
+
+
+    # Adding additional entry tree
+    debug "======= Couple imported topics to their entries";
+    sleep 10;
+    foreach my $tid ( keys %TOPIC )
+    {
+	import_topic_entries( $tid );
+    }
+
+    # Adding main parent
+    debug "======= Couple imported topics to their parents";
+    sleep 10;
+    foreach my $tid ( keys %TOPIC )
+    {
+	import_topic_parent( $tid );
+    }
+
+    debug "======= Topics import done";
 
 
     $Para::Frame::REQ->done;
@@ -2757,7 +2765,7 @@ sub import_topic_entries
     my $th = $TOPIC{$id};
 
     my $n = $th->{node};
-    debug "  importing entries for ".$n->sysdesig;
+    debug "*****  importing entries for ".$n->sysdesig;
 
 
     unless( $n->has_value({is=>$pc_topic}) )
@@ -2826,8 +2834,8 @@ sub import_topic
     my $n = import_topic_main( $id, $rec );
     return undef unless $n;
 
-###    import_topic_parent( $id );
-###    import_topic_entries( $id );
+    import_topic_parent( $id );
+    import_topic_entries( $id );
 
     return $n;
 }

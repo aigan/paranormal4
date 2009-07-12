@@ -15,8 +15,7 @@ use Para::Frame::Reload;
 use Para::Frame::Utils qw( throw catch debug datadump deunicode );
 use Para::Frame::L10N qw( loc );
 
-use Rit::Base::Constants qw( $C_pc_topic );
-
+use Rit::Base::Constants;
 use Rit::Base::Utils qw( valclean parse_propargs query_desig );
 
 ##############################################################################
@@ -149,7 +148,7 @@ sub item_by_path
 
     my $args = {};
     my( $alts ) = Rit::Base::Resource->find({
-					     is=>$C_pc_topic,
+					     is=>Rit::Base::Constants->get('pc_topic'),
 					     pc_public_path => $path,
 					    }, $args);
 

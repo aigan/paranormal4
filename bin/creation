@@ -112,7 +112,7 @@ use Para::User::Meta;
     my $appback = [$CFG->{'pc_root'}, $CFG->{'rb_root'}];
     my $pc_root = $CFG->{'pc_root'};
 
-    $CFG->{'debug'} ||= 0;
+    $CFG->{'debug'} ||= 1;
     if( looks_like_number($ARGV[0]) )
     {
 	$CFG->{'debug'} = $ARGV[0];
@@ -130,7 +130,7 @@ use Para::User::Meta;
      'appbase'         => 'Para',
      'appfmly'         => 'Rit::Base',
 #     'tt_plugins'      => 'Rit::Guides::Template::Plugin',
-
+#     'worker_startup'    => ( $CFG->{'worker_startup'} // 1),
 #     'user_class'      => 'Para::Member::Meta',
      'user_class'      => 'Para::User::Meta',
      'session_class'   => 'Rit::Base::Session',
@@ -139,6 +139,7 @@ use Para::User::Meta;
      'search_result_class'     => 'Rit::Base::Search::Result',
      'l10n_class'      => 'Rit::Base::L10N',
      'site_class'      => 'Rit::Base::Site',
+     'find_class'      => 'Para::Go',
 
 #     'rb_default_source' => 'paranormal_sweden_creation',
 

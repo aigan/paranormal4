@@ -38,7 +38,7 @@ use Para::Frame::Time qw( now );
 use Rit::Base::Utils qw( valclean parse_propargs query_desig );
 use Rit::Base::Setup;
 
-our( %TOPIC, %RELTYPE, @AUTOCREATED, $R, $L, $LOG, $odbix, $class, $individual, $pc_topic, $pc_entry, $pc_featured_topic, $word_plural, $information_store, $mia, $organization, $ia, $practisable );
+our( %TOPIC, %RELTYPE, @AUTOCREATED, $R, $L, $LOG, $odbix, $class, $individual, $pc_topic, $pc_entry, $pc_featured_topic, $word_plural, $information_store, $mia, $organization, $ia, $practicable );
 
 sub dlog;
 
@@ -508,20 +508,22 @@ sub setup_db
 		      is => $class,
 		     });
 
-    $practisable
+    $practicable
       = $R->find_set({
-		      label => 'pct_practisable',
-		      admin_comment => "Stuff that an IntelligentAgent can be involved in or use (IntelligentAgentActivity), like therapies, religions or skills",
+		      label           => 'pct_practicable',
+		      name            => 'Praktiserbart',
+		      admin_comment   => "Stuff that an IntelligentAgent can be involved in or use (IntelligentAgentActivity), like therapies, religions or skills",
 		      pc_old_topic_id => 11,
-		      scof => $ais,
+		      scof            => $ais,
 		     });
 
     my $experiencable
       = $R->find_set({
-		      label => 'pct_experiencable',
-		      admin_comment => "Stuff that a person can experience, tat would be of interest",
+		      label           => 'pct_experiencable',
+		      name            => 'Upplevbart',
+		      admin_comment   => "Stuff that a person can experience, tat would be of interest",
 		      pc_old_topic_id => 12,
-		      is => $class,
+		      is              => $class,
 		     });
 
 #    my $person_type
@@ -1188,7 +1190,7 @@ sub setup_db
 #		  label => 'pci_skill',
 #		  is => $C_predicate,
 #		  domain => $C_login_account,
-#		  range => $practisable,
+#		  range => $practicable,
 #		  admin_comment => "Old intrest.skill",
 #		 });
 #
@@ -1196,7 +1198,7 @@ sub setup_db
 #		  label => 'pci_practice',
 #		  is => $C_predicate,
 #		  domain => $C_login_account,
-#		  range => $practisable,
+#		  range => $practicable,
 #		  admin_comment => "Old intrest.practice",
 #		 });
 #
@@ -1341,7 +1343,7 @@ sub setup_db
 	     domain => $agent_generic,
 	    },
 	    {
-	     pred => 'allways_interested_in',
+	     pred => 'always_interested_in',
 	     domain_scof => $agent_generic,
 	    },
 	    {
@@ -1406,14 +1408,14 @@ sub setup_db
      33 => ['is_of_language', $media, $C_language],
      34 => [
 	    {
-	     pred => 'practise',
+	     pred => 'practice',
 	     domain => $ia,
-	     range => $practisable,
+	     range => $practicable,
 	    },
 	    {
-	     pred => 'allways_practice',
+	     pred => 'always_practice',
 	     domain_scof => $person,
-	     range => $practisable,
+	     range => $practicable,
 	    },
 	   ],
      35 => [
@@ -1423,7 +1425,7 @@ sub setup_db
 	     range => $experiencable,
 	    },
 	    {
-	     pred => 'allways_experienced',
+	     pred => 'always_experienced',
 	     domain_scof => $ia,
 	     range => $experiencable,
 	    },
@@ -2518,7 +2520,7 @@ sub setup_db
 	$R->commit;
 
 	debug "======= retrieving list of all topics and rels";
-	my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t >= 0 and t_entry is false order by t limit 12');
+	my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t >= 0 and t_entry is false order by t');
 	my( $rec, $error ) = $list->get_first;
 	while(! $error )
 	{
@@ -3162,12 +3164,12 @@ sub import_topic_arc
 		    push  @AUTOCREATED, $obj->add_arc({is => $information_store});
 		}
 	    }
-	    elsif( $pred_obj->valtype->equals($practisable) )
+	    elsif( $pred_obj->valtype->equals($practicable) )
 	    {
-		unless( $obj->has_value({is => $practisable}) )
+		unless( $obj->has_value({is => $practicable}) )
 		{
-		    dlog "AUTOCREATING practisable for ".$obj->sysdesig;
-		    push  @AUTOCREATED, $obj->add_arc({is => $practisable});
+		    dlog "AUTOCREATING practicable for ".$obj->sysdesig;
+		    push  @AUTOCREATED, $obj->add_arc({is => $practicable});
 		}
 	    }
 

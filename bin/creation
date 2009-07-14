@@ -64,6 +64,7 @@ use Rit::Base::Site;
 use Para;
 use Para::User::Meta;
 use Para::Resource;
+use Para::Widget;
 
 
 {
@@ -108,7 +109,6 @@ use Para::Resource;
 	    'css'        => $para_css,
 	},
     });
-
 
     my $appback = [$CFG->{'pc_root'}, $CFG->{'rb_root'}];
     my $pc_root = $CFG->{'pc_root'};
@@ -236,6 +236,14 @@ use Para::Resource;
     #
     my $burner_plain = Para::Frame::Burner->get_by_type('plain');
     $burner_plain->add_ext('htaccess');
+
+    # Define TT filters
+    #
+    warn "Burner for html is ". Para::Frame::Burner->get_by_type('html');
+    Para::Frame::Burner->get_by_type('html')->add_filters({
+        'html_psi' => \&Para::Widget::html_psi_factory,
+        'html_psi_nolinks' => \&Para::Widget::html_psi_nolinks_factory,
+    }, 1);
 
 
 

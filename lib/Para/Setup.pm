@@ -510,18 +510,20 @@ sub setup_db
 
     $practisable
       = $R->find_set({
-		      label => 'pct_practisable',
-		      admin_comment => "Stuff that an IntelligentAgent can be involved in or use (IntelligentAgentActivity), like therapies, religions or skills",
+		      label           => 'pct_practisable',
+		      name            => 'Praktiserbart',
+		      admin_comment   => "Stuff that an IntelligentAgent can be involved in or use (IntelligentAgentActivity), like therapies, religions or skills",
 		      pc_old_topic_id => 11,
-		      scof => $ais,
+		      scof            => $ais,
 		     });
 
     my $experiencable
       = $R->find_set({
-		      label => 'pct_experiencable',
-		      admin_comment => "Stuff that a person can experience, tat would be of interest",
+		      label           => 'pct_experiencable',
+		      name            => 'Upplevbart',
+		      admin_comment   => "Stuff that a person can experience, tat would be of interest",
 		      pc_old_topic_id => 12,
-		      is => $class,
+		      is              => $class,
 		     });
 
 #    my $person_type
@@ -1341,7 +1343,7 @@ sub setup_db
 	     domain => $agent_generic,
 	    },
 	    {
-	     pred => 'allways_interested_in',
+	     pred => 'always_interested_in',
 	     domain_scof => $agent_generic,
 	    },
 	    {
@@ -1411,7 +1413,7 @@ sub setup_db
 	     range => $practisable,
 	    },
 	    {
-	     pred => 'allways_practice',
+	     pred => 'always_practise',
 	     domain_scof => $person,
 	     range => $practisable,
 	    },
@@ -1423,7 +1425,7 @@ sub setup_db
 	     range => $experiencable,
 	    },
 	    {
-	     pred => 'allways_experienced',
+	     pred => 'always_experienced',
 	     domain_scof => $ia,
 	     range => $experiencable,
 	    },

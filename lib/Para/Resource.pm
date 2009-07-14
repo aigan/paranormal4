@@ -15,6 +15,7 @@ use constant UMASK => 02;
 
 use Para::Frame::Reload;
 use Para::Frame::Utils qw( debug datadump throw );
+use Para::Frame::Widget qw( jump );
 
 use Rit::Base::Constants qw( );
 use Rit::Base::Resource;
@@ -327,6 +328,27 @@ sub unpublish
 	return 1;
     }
     return 0;
+}
+
+
+##############################################################################
+
+=head2 wp_jump
+
+Widget for presentation jump.
+
+=cut
+
+sub wp_jump
+{
+    my( $node, $args ) = @_;
+
+    my $home = $Para::Frame::REQ->site->home_url_path;
+
+    my $label = $args->{label} || $node->desig;
+    # Add label...
+
+    return jump($label, $home .'/topic/'. $node->get_set_url_part . '.html');
 }
 
 

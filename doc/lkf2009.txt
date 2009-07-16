@@ -128,7 +128,7 @@
 018824=Blidö
 018825=Länna
 018826=Riala
-0191Sigtuna
+0191=Sigtuna
 019101=Sigtuna
 019106=Husby-Ärlinghundra
 019108=Norrsunda

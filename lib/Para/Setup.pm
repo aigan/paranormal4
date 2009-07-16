@@ -38,7 +38,7 @@ use Para::Frame::Time qw( now );
 use Rit::Base::Utils qw( valclean parse_propargs query_desig );
 use Rit::Base::Setup;
 
-our( %TOPIC, %RELTYPE, @AUTOCREATED, $R, $L, $LOG, $odbix, $class, $individual, $pc_topic, $pc_entry, $pc_featured_topic, $word_plural, $information_store, $mia, $organization, $ia, $practisable );
+our( %TOPIC, %RELTYPE, @AUTOCREATED, $req, $R, $L, $C, $LOG, $odbix, $class, $individual, $pc_topic, $pc_entry, $pc_featured_topic, $word_plural, $information_store, $mia, $organization, $ia, $practisable, $C_website_url, $C_email_address, $C_login_account, $C_predicate, $C_resource, $C_arc, $C_int, $C_float, $C_bool, $C_date, $C_url, $C_file, $C_text, $C_term, $C_phone_number, $C_language, $C_password);
 
 sub dlog;
 
@@ -49,17 +49,26 @@ sub setup_db
 	return;
     }
 
-    my $dbix = $Rit::dbix;
-    my $dbh = $dbix->dbh;
-    my $now = DateTime::Format::Pg->format_datetime(now);
+    $req = Para::Frame::Request->new_bgrequest();
 
     $R = Rit::Base->Resource;
-    my $C = Rit::Base->Constants;
     $L = Rit::Base->Literal;
+    $C = Rit::Base->Constants;
+
+    ### Open log for important notes
+    #
+    create_dir( $Para::Frame::CFG->{'dir_log'} );
+    my $import_log = $Para::Frame::CFG->{'dir_log'}.'/import.log';
+    $LOG = IO::File->new($import_log,">:encoding(UTF-8)") or die "Failed to open $import_log: ".$!;
+
+
+    $odbix = Para::Frame::DBIx->
+      new({connect =>$Para::CFG->{'dbconnect_old'}});
+    $odbix->connect;
+
+
 
     my $root = $R->get_by_label('root');
-
-    my $req = Para::Frame::Request->new_bgrequest();
 
     debug "Setting up DB - paranormal";
     $req->user->change_current_user( $root );
@@ -70,55 +79,831 @@ sub setup_db
 				     });
 
     debug "Args:\n".query_desig($args);
-
-
     debug "User is ".$req->user->desig;
-
     debug "------------------------------------";
 
-    $odbix = Para::Frame::DBIx->
-      new({connect =>$Para::CFG->{'dbconnect_old'}});
-    $odbix->connect;
-    my $odbh = $odbix->dbh;
 
-
-
-    my $C_login_account     = $C->get('login_account');
     $ia                  = $C->get('intelligent_agent');
-    my $C_predicate         = $C->get('predicate');
-    $class                  = $C->get('class');
-    my $C_resource          = $C->get('resource');
-    my $C_arc               = $C->get('arc');
+    $class               = $C->get('class');
+    $C_website_url       = $C->get('website_url');
+    $C_email_address     = $C->get('email_address');
+    $C_login_account     = $C->get('login_account');
+    $C_predicate         = $C->get('predicate');
+    $C_resource          = $C->get('resource');
+    $C_arc               = $C->get('arc');
+    $C_int               = $C->get('int');
+    $C_float             = $C->get('float');
+    $C_bool              = $C->get('bool');
+    $C_date              = $C->get('date');
+    $C_url               = $C->get('url');
+    $C_file              = $C->get('file');
+    $C_text              = $C->get('text');
+    $C_term              = $C->get('term');
+    $C_phone_number      = $C->get('phone_number');
+    $C_language          = $C->get('language');
+    $C_password          = $C->get('password');
 
-    my $C_int   = $C->get('int');
-    my $C_float = $C->get('float');
-    my $C_bool  = $C->get('bool');
-    my $C_date  = $C->get('date');
-    my $C_url   = $C->get('url');
-    my $C_file   = $C->get('file');
-    my $C_website_url   = $C->get('website_url');
-    my $C_email_address = $C->get('email_address');
-    my $C_text  = $C->get('text');
-    my $C_term  = $C->get('term');
-    my $C_phone_number = $C->get('phone_number');
-    my $C_language = $C->get('language');
-    my $C_password = $C->get('password');
+
+
+    given( $ARGV[1] )
+    {
+	when(1){ setup_base() }
+	when(2){ setup_location() }
+	when(3){ setup_member() }
+	when(4){ setup_topic() }
+	when(5){ setup_ts() }
+	when(6){ setup_talias() }
+	when(7){ setup_media() }
+    }
+
+
+
+    $Para::Frame::REQ->done;
+    $req->user->set_default_propargs(undef);
+
+    print "Done!\n";
+
+    return;
+}
+
+sub setup_media
+{
+    # MEDIA
+    #
+    # media                 ...
+    # media_mimetype        is ...?
+    # media_url             has_url
+    # media_checked_working -
+    # media_checked_failed  -
+    # media_speed           -
+
+    # This is all mimetypes used in old db;
+    #   application/pdf
+    #   email
+    #   image/gif
+    #   image/jpeg
+    #   image/png
+    #   image/svg+xml
+    #   text/html
+    #   text/plain
+
+    my %mtype;
+
+    my $computer_file_ais
+      = $R->find_set({
+		      label => 'computer_file_ais',
+		      admin_comment => "Each instance of ComputerFile-AIS is an abstract series of bits encoding some information and conforming to some file system protocol.",
+		      scof => $C->get('abis'),
+		      has_cyc_id => 'ComputerFile-AIS',
+		     });
+
+    my $computer_file_type_by_format
+      = $R->find_set({
+		      label => 'computer_file_type_by_format',
+		      admin_comment => "A collection of collections of computer files [ComputerFile-AIS]. Each instance of ComputerFileTypeByFormat (e.g. JPEGFile) is a collection of all ComputerFile-AISs that conform to a single preestablished layout for electronic data. Programs accept data as input in a certain format, process it, and provide it as output in the same or another format. This constant refers to the format of the data. For every instance of ComputerFileCopy, one can assert a fileFormat for it.",
+		      is => $class, # SecondOrderCollection
+		      has_cyc_id => 'ComputerFileTypeByFormat',
+		     });
+
+    $mtype{'application/pdf'}
+      = $R->find_set({
+		      label => 'file_pdf',
+		      admin_comment => "Computer files encoded in the PDF file format.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'PortableDocumentFormatFile',
+		      code => 'application/pdf',
+		     });
+
+    $mtype{'email'}
+      = $R->find_set({
+		      label => 'file_email',
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'EMailFile',
+		      code => 'email',
+		     });
+
+    my $file_image
+      = $R->find_set({
+		      label => 'file_image',
+		      admin_comment => "A specialization of ComputerFile-AIS. Each ComputerImageFile contains a digital representation of some VisualImage, and is linked to an instance of ComputerImageFileTypeByFormat via the predicate fileFormat.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'ComputerImageFile',
+		     });
+
+    $mtype{'image/gif'}
+      = $R->find_set({
+		      label => 'file_gif',
+		      admin_comment => "A collection of ComputerImageFiles. Each GIFFile is encoded in the \"Graphics Interchange Format\". GIFFiles are extremely common for inline images on web pages, and generally have filenames that end in \".gif\".",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      has_cyc_id => 'GIFFile',
+		      code => 'image/gif',
+		     });
+
+    $mtype{'image/jpeg'}
+      = $R->find_set({
+		      label => 'file_jpeg',
+		      admin_comment => "A collection of ComputerImageFiles. Each JPEGFile is a ComputerImageFile whose fileFormat conforms to the standard image compression algorithm designed by the Joint Photographic Experts Group for compressing either full-colour or grey-scale digital images of 'natural', real-world scenes. Instances of JPEGFile often have filenames that end in '.jpg' or '.jpeg'.",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      has_cyc_id => 'JPEGFile',
+		      code => 'image/jpeg',
+		     });
+
+    $mtype{'image/png'}
+      = $R->find_set({
+		      label => 'file_png',
+		      admin_comment => "The collection of computer image files encoded in the '.png' file format. Designed to replace GIF files, PNG files have three main advantages: alpha channels (variable transparency), gamma correction (cross-platform control of image brightness) and two-dimensional interlacing.",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      has_cyc_id => 'PortableNetworkGraphicsFile',
+		      code => 'image/png',
+		     });
+
+    $mtype{'image/svg+xml'}
+      = $R->find_set({
+		      label => 'file_svg',
+		      admin_comment => "An SVG image file",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      code => 'image/svg+xml',
+		     });
+
+    $mtype{'text/html'}
+      = $R->find_set({
+		      label => 'file_html',
+		      admin_comment => "The subcollection of ComputerFile-AIS written in the language HypertextMarkupLanguage.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'HTMLFile',
+		      code => 'text/html',
+		     });
+
+    $mtype{'text/plain'}
+      = $R->find_set({
+		      label => 'file_text_plain',
+		      admin_comment => "A plain text file with any charset.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      code => 'text/plain',
+		     });
+
+
+    #### Specifying node types
+    {
+	my %mapis =
+	  (
+	  );
+
+	foreach my $key ( keys %mapis )
+	{
+	    my $n = import_topic( $key );
+	    $n->add({is => $mapis{$key} });
+	}
+
+	my %mapscof =
+	  (
+	   396717 => $C->get('person'),
+	  );
+
+	foreach my $key ( keys %mapscof )
+	{
+	    my $n = import_topic( $key );
+	    $n->add({scof => $mapscof{$key} });
+	}
+
+
+
+    };
+
+
+    dlog "======= retrieving list of all media";
+    my $list = $odbix->select_list('from media order by media');
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	my $t = import_topic( $rec->{media} );
+	next unless $t;
+
+	my $code_str = $rec->{'media_mimetype'};
+	my $url_str = $rec->{'media_url'};
+
+	$t->add({
+		 is => $mtype{$code_str},
+		 has_url => $url_str,
+		});
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+}
+
+sub setup_talias
+{
+    dlog "======= retrieving list of all topic aliases";
+    my $list = $odbix->select_list('from talias where talias_active is true and talias_status > 3 order by talias_t');
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	my $t = import_topic( $rec->{talias_t} );
+	my $str = $rec->{talias};
+
+	debug "Alias $str for ".$t->sysdesig;
+
+	my $al;
+	foreach my $eal ( $t->list('name')->as_array )
+	{
+	    if( lc($eal->plain) eq lc($str) )
+	    {
+		$al = $eal;
+		last;
+	    }
+	}
+
+	unless( $al )
+	{
+	    $al = $L->new($str,$C_term);
+	    $t->add({'name'=>$al});
+	}
+
+	my %props;
+	if( $rec->{talias_autolink} )
+	{
+	    $props{pca_autolink} = 1;
+	}
+
+	if( $rec->{talias_index} )
+	{
+	    $props{pca_index} = 1;
+	}
+
+	$props{url_part} = $rec->{talias_urlpart};
+
+	if( $rec->{talias_language} )
+	{
+	    my $lang =  import_topic( $rec->{talias_language} );
+	    $props{is_of_language} = $lang;
+	}
+
+	# TODO: Set the creator and created date of literal
+	$al->add(\%props);
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+}
+
+sub setup_ts
+{
+    dlog "======= retrieving list of all topic statements";
+    my $list = $odbix->select_list('from ts where ts_active is true and ts_status > 2 order by ts_entry');
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	my $e = import_topic( $rec->{ts_entry} );
+	my $t = import_topic( $rec->{ts_topic} );
+	$e->add_arc({'cia' => $t});
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+}
+
+sub setup_topic
+{
+    dlog "======= retrieving list of all topics and rels";
+    my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t >= 0 and t_entry is false order by t');
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	if( my $n = import_topic_main( $rec->{'t'}, $rec ) )
+	{
+	    import_topic_arcs( $n );
+	}
+
+	dlog sprintf "==== %7d", $list->index;
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+
+    # Adding additional entry tree
+    dlog "======= Couple imported topics to their entries";
+    foreach my $tid ( keys %TOPIC )
+    {
+	import_topic_entries( $tid );
+    }
+
+    # Adding main parent
+    dlog "======= Couple imported topics to their parents";
+    foreach my $tid ( keys %TOPIC )
+    {
+	import_topic_parent( $tid );
+    }
+
+    dlog "======= Topics import done";
+}
+
+sub setup_member
+{
+    my %map =
+      (
+       pc_member_id => 'member',
+       name_short => 'nickname',
+       pc_member_level => 'member_level',
+       pc_latest_in => 'latest_in',
+       pc_latest_out => 'latest_out',
+       pc_latest_host => 'latest_host',
+       sys_username => 'sys_uid',
+       pc_sys_logging => 'sys_logging',
+       pc_present_contact => 'present_contact',
+       pc_present_activity => 'present_activity',
+       pc_member_general_belief => 'general_belief',
+       pc_member_general_theory => 'general_theory',
+       pc_member_general_practice => 'general_practice',
+       pc_member_general_editor => 'general_editor',
+       pc_member_general_helper => 'general_helper',
+       pc_member_general_meeter => 'general_meeter',
+       pc_member_general_bookmark => 'general_bookmark',
+       pc_member_general_discussion => 'general_discussion',
+       pc_chat_nick => 'chat_nick',
+       pc_member_newsmail_level => 'newsmail',
+       pc_member_show_complexity_level => 'show_complexity',
+       pc_member_show_detail_level => 'show_detail',
+       pc_member_show_edit_level => 'show_edit',
+       pc_show_style => 'show_style',
+       name_given => 'name_given',
+       name_middle => 'name_middle',
+       name_family => 'name_family',
+       pc_bdate_year => 'bdate_ymd_year',
+       description => 'presentation',
+       geo_x => 'geo_x',
+       geo_y => 'geo_y',
+       pc_old_topic_id => 'member_topic',
+       pc_member_present_interests => 'present_intrests',
+       pc_member_payment_period_length => 'member_payment_period_length',
+       pc_member_payment_period_expire => 'member_payment_period_expire',
+       pc_member_payment_period_cost => 'member_payment_period_cost',
+       pc_member_payment_total => 'member_payment_total',
+       pc_member_chat_level => 'chat_level',
+       pc_member_present_contact_public => 'present_contact_public',
+       pc_member_show_level => 'show_level',
+       pc_member_present_gifts => 'present_gifts',
+       admin_comment => 'member_comment_admin',
+       pc_member_present_blog => 'present_blog',
+      );
+
+    my %va =
+      (
+       sys_email => $C_email_address,
+       home_online_uri => $C_website_url,
+       home_online_icq => $C->get('address_icq'),
+       home_online_msn => $C->get('address_msn'),
+       home_tele_phone => $C->get('address_phone_stationary'),
+       home_tele_mobile => $C->get('address_phone_mobile'),
+       home_online_skype => $C->get('address_skype'),
+      );
+
+    dlog "retrieving list of all members";
+
+    my $person = $C->get('person');
+    my $femenine_person = $C->get('femenine_person');
+    my $masculine_person = $C->get('masculine_person');
+
+    my $list = $odbix->select_list('from member where member_level > 4 and member > 0 order by member');
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	my %mdata;
+	foreach my $key ( keys %map )
+	{
+	    $mdata{ $key } = $rec->{ $map{ $key } };
+	    debug sprintf "%s -> %s: %s\n", $key, $map{ $key }, ($rec->{ $map{ $key } }||'<undef>');
+	}
+
+
+	my @virt_adr;
+	foreach my $key ( keys %va )
+	{
+	    if( $rec->{$key} )
+	    {
+		my $val = $L->new($rec->{$key},$va{$key});
+		push @virt_adr, $val;
+		dlog "Adding virtual address ".$val->sysdesig;
+#		    push @virt_adr, $L->new($rec->{$key},$va{$key});
+	    }
+	}
+
+	$mdata{'has_virtual_address'} = \@virt_adr;
+
+	my @is = ($C_login_account, $person);
+	if( $rec->{'gender'} eq 'F' )
+	{
+	    push @is, $femenine_person;
+	}
+	elsif( $rec->{'gender'} eq 'M' )
+	{
+	    push @is, $masculine_person;
+	}
+
+	$mdata{'is'} = \@is;
+
+
+	my $m = $R->create( {created=>$rec->{'member_created'}} );
+	$m->add( \%mdata, {write_access=>$m} );
+
+	### defailt email
+	#
+	if( my $sysmail_arc = $m->first_arc('has_virtual_address',
+					    {'is'=>$C_email_address}) )
+	{
+	    $sysmail_arc->set_weight( 10, {force_same_version=>1} );
+	    debug sprintf "Setting weight of %s to 10", $sysmail_arc->desig;
+	}
+	my $malist = $odbix->select_list('from mailalias where mailalias_member=?', $rec->{'member'} );
+	my( $marec, $maerror ) = $malist->get_first;
+	while(! $maerror )
+	{
+	    my $ea = $L->new($marec->{'mailalias'},$C_email_address);
+	    $m->add({'has_virtual_address'=>$ea}, {write_access=>$m});
+	}
+	continue
+	{
+	    ( $marec, $maerror ) = $malist->get_next;
+	}
+
+	### default nick
+	#
+	my $nick_arc = $m->first_arc('name_short');
+	$nick_arc->set_weight( 10, {force_same_version=>1} );
+	debug sprintf "Setting weight of %s to 10", $nick_arc->desig;
+	my $nick = $nick_arc->value;
+	my $nicklist = $odbix->select_list('from nick where nick_member=?', $rec->{'member'} );
+	my( $nickrec, $nickerror ) = $nicklist->get_first;
+	while(! $nickerror )
+	{
+	    my $anick = $nickrec->{'uid'};
+	    next if $anick eq 'root';
+	    next if valclean($anick) eq $nick->clean_plain;
+	    my $nick = $L->new($nickrec->{'uid'},$C_text);
+	    $m->add({'name_short'=>$nick}, {write_access=>$m});
+	}
+	continue
+	{
+	    ( $nickrec, $nickerror ) = $nicklist->get_next;
+	}
+
+	### Password
+	#
+	my $pwdrec = $odbix->select_record('from passwd where passwd_member=?', $rec->{'member'} );
+	my $pwd = $L->new($pwdrec->{'passwd'},$C_password);
+	#### TODO:  Waiting with password til they get more secure
+	#	    $m->add({'has_password'=>$pwd}, {read_access=>$m,write_access=>$m});
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+}
+
+sub setup_location
+{
+    # LOCATIONS
+    #
+    # country            loc_country
+    # county             loc_county
+    # municipality       loc_municipality
+    # city               loc_city
+    # parish             loc_parish
+    # zipcode            loc_zipcode
+    # street             loc_street
+    # address            loc_address
+
+    my $location = $C->get('location');
+
+    my $planet_earth =
+      $R->find_set({
+		    label => 'planet_earth',
+		    is => $location,
+		    pc_old_topic_id => 144335,
+		    has_cyc_id => 'PlanetEarth',
+		    has_wikipedia_id => 'Earth',
+		   });
+
+    my $sweden =
+      $R->find_set({
+		    label => 'sweden',
+		    is => $location,
+		    pc_old_topic_id => 397071,
+		    is_part_of => $planet_earth,
+		    has_wikipedia_id => 'Sweden',
+		   });
+
+    my $country =
+      $R->find_set({
+		    label => 'loc_country',
+		    scof => $location,
+		    pc_old_topic_id => 129520,
+		    has_cyc_id => 'Country',
+		    has_wikipedia_id => 'Country',
+		   });
+    my $county =
+      $R->find_set({
+		    label => 'loc_county',
+		    scof => $location,
+		    pc_old_topic_id => 541764,
+		    has_cyc_id => 'County',
+		    has_wikipedia_id => 'County',
+		   });
+
+    my $municipality =
+      $R->find_set({
+		    label => 'loc_municipality',
+		    scof => $location,
+		    has_cyc_id => 'Municipality',
+		    can_be_part_of => $county,
+		    has_wikipedia_id => 'Municipality',
+		   });
+
+    my $city =
+      $R->find_set({
+		    label => 'loc_city',
+		    scof => $location,
+		    pc_old_topic_id => 129524,
+		    has_cyc_id => 'City',
+		    can_be_part_of => $municipality,
+		    has_wikipedia_id => 'City',
+		   });
+
+    my $parish =
+      $R->find_set({
+		    label => 'loc_parish',
+		    scof => $location,
+		    can_be_part_of => $municipality,
+		    has_wikipedia_id => 'Parish_(country_subdivision)',
+		   });
+
+    my $zipcode =
+      $R->find_set({
+		    label => 'loc_zipcode',
+		    scof => $location,
+		    admin_comment => "A specialization of ContactInfoString. Each instance of PostalCode is a character string used by a postal service to designate a particular geographic area.",
+		    has_cyc_id => 'InternationalPostalCode',
+		    can_be_part_of => $city,
+		    has_wikipedia_id => 'Postal_code',
+		   });
+
+
+    my %countyidx;
+  COUNTY:
+    {
+	my $countylist = $odbix->select_list('from county');
+	my( $countyrec, $countyerror ) = $countylist->get_first;
+	while(! $countyerror )
+	{
+	    my $id = sprintf "%.2d", $countyrec->{'county'};
+	    $countyidx{ $id } =
+	      $R->create({
+			  name => $countyrec->{county_name},
+			  code => $id,
+			  name_short => $countyrec->{county_code},
+			  is => $county,
+			  is_part_of => $sweden,
+			 });
+	}
+	continue
+	{
+	    ( $countyrec, $countyerror ) = $countylist->get_next;
+	}
+    }
+
+    my %cityidx;
+  CITY:
+    {
+	dlog "retrieving list of all cities";
+	my $citylist = $odbix->select_list('from city');
+	my( $cityrec, $cityerror ) = $citylist->get_first;
+	while(! $cityerror )
+	{
+	    $cityidx{ $cityrec->{'city'} } =
+	      $R->create({
+			  name => ucfirst lc $cityrec->{city_name},
+			  is => $city,
+			  is_part_of => $countyidx{ $cityrec->{city_l} },
+			  geo_x => $cityrec->{city_x},
+			  geo_y => $cityrec->{city_y},
+			 });
+	}
+	continue
+	{
+	    ( $cityrec, $cityerror ) = $citylist->get_next;
+	}
+    }
+
+    my %munidx;
+  MUNICIPALITY:
+    {
+	dlog "retrieving list of all municipalities";
+	my $munlist = $odbix->select_list('from municipality');
+	my( $munrec, $munerror ) = $munlist->get_first;
+	while(! $munerror )
+	{
+	    $munidx{ $munrec->{'municipality'} } =
+	      $R->create({
+			  name => $munrec->{municipality_name},
+			  is => $municipality,
+			  code => $munrec->{municipality},
+			  is_part_of => $countyidx{ $munrec->{municipality_l} },
+			 });
+	}
+	continue
+	{
+	    ( $munrec, $munerror ) = $munlist->get_next;
+	}
+    }
+
+    my %parishidx;
+  PARISH:
+    {
+	dlog "retrieving list of all parishes";
+	my $parishlist = $odbix->select_list('from parish');
+	my( $parishrec, $parisherror ) = $parishlist->get_first;
+	while(! $parisherror )
+	{
+	    $parishidx{ $parishrec->{'parish'} } =
+	      $R->create({
+			  name => $parishrec->{parish_name},
+			  is => $parish,
+			  code => $parishrec->{parish},
+			  is_part_of => $munidx{ $parishrec->{parish_lk} },
+			 });
+	}
+	continue
+	{
+	    ( $parishrec, $parisherror ) = $parishlist->get_next;
+	}
+    }
+
+
+    # Now bring the official codes up to date for 2009
+    #
+    dlog "Setting up LKF 2009";
+    open LKF, '<', $Para::CFG->{'pc_root'}.'/doc/lkf2009.txt' or die $!;
+    while(my $line = <LKF>)
+    {
+	chomp $line;
+	next unless $line;
+
+	utf8::decode( $line );
+	my( $key, $val ) = split /=/, $line;
+	my( $l, $k, $f ) = $key =~ /^(..)(..)?(..)?/;
+
+	if( $f )
+	{
+	    dlog "F $key = $val";
+	    $parishidx{ $key } =
+	      $R->create({
+			  name => $val,
+			  is => $parish,
+			  code => $key,
+			  is_part_of =>  $munidx{ $l.$k },
+			 });
+	}
+	elsif( $k )
+	{
+	    dlog "K $key = $val";
+	    $munidx{ $key } =
+	      $R->create({
+			  name => $val,
+			  is => $municipality,
+			  code => $key,
+			  is_part_of => $countyidx{ $l },
+			 });
+	}
+	elsif( $l )
+	{
+	    dlog "L $key = $val";
+	    # Done above
+	}
+	else
+	{
+	    die "Could not parse key $key";
+	}
+    }
+
+
+
+
+
+
+
+
+  ZIPCODE:
+    {
+	my %trans =
+	  (
+	   1917 => '0331',
+	  );
+
+	dlog "retrieving list of all zipcodes";
+	my $ziplist = $odbix->select_list('from zip');
+	my( $ziprec, $ziperror ) = $ziplist->get_first;
+	while(! $ziperror )
+	{
+	    my $zip_city = $ziprec->{zip_city};
+	    my $zip_lk = sprintf "%.4d", $ziprec->{zip_lk};
+
+	    if( $trans{$zip_lk} ){ $zip_lk = $trans{$zip_lk} };
+
+
+	    unless( $cityidx{ $zip_city } )
+	    {
+		dlog "City $zip_city not found in city index";
+		next;
+	    }
+
+	    unless( $munidx{ $zip_lk } )
+	    {
+		dlog "Municipality $zip_lk not found in mun index";
+		next;
+	    }
+
+	    $R->create({
+			is => $zipcode,
+			code => $ziprec->{zip},
+			is_part_of => [
+				       $cityidx{ $zip_city },
+				       $munidx{ $zip_lk },
+				      ],
+			geo_x => $ziprec->{zip_x},
+			geo_y => $ziprec->{zip_y},
+		       });
+	}
+	continue
+	{
+	    ( $ziprec, $ziperror ) = $ziplist->get_next;
+	}
+    }
+
+
+# TODO: Import street and address
+
+#    # ADDRESS
+#    #
+#    # address_street     -
+#    # address_nr_from    pc_address_nr_from
+#    # address_nr_to      pc_address_nr_to
+#    # address_step       pc_address_nr_step
+#    # address_zip        is_part_of
+#    # address_from_x     -
+#    # address_from_y     -
+#    # address_to_x       -
+#    # address_to_y       -
+#
+#
+#    my $pc_address_nr_from =
+#      $R->find_set({
+#		    label => 'pc_address_nr_from',
+#		    is => $C_predicate,
+#		    domain => $C_login_account,
+#		    range => $pc_website_style,
+#		    admin_comment => "Old member.show_style",
+#		   });
+#
+
+
+################################
+# ApartmentBuilding
+# ModernHumanResidence
+# HumanResidence
+# PhysicalContactLocation
+# ContactLocation
+# PartiallyTangible
+
+
+}
+
+sub setup_base
+{
+#    my $now = DateTime::Format::Pg->format_datetime(now);
+#    my $odbh = $odbix->dbh;
 
     my $pc = $R->find_set({
 			   label => 'paranormal_sweden_creation',
 			   is => $C_login_account,
 			  });
-    $dbix->commit;
 
     $Para::Frame::CFG->{'rb_default_source'} = $pc;
     $req->user->change_current_user( $pc );
 
 
-    ### Open log for important notes
-    #
-    create_dir( $Para::Frame::CFG->{'dir_log'} );
-    my $import_log = $Para::Frame::CFG->{'dir_log'}.'/import.log';
-    $LOG = IO::File->new($import_log,">:encoding(UTF-8)") or die "Failed to open $import_log: ".$!;
     $LOG->autoflush(1);
     $LOG->print("Started import log ".scalar(localtime)."\n\n");
 
@@ -1575,320 +2360,6 @@ sub setup_db
 
 
 
-    # LOCATIONS
-    #
-    # country            loc_country
-    # county             loc_county
-    # municipality       loc_municipality
-    # city               loc_city
-    # parish             loc_parish
-    # zipcode            loc_zipcode
-    # street             loc_street
-    # address            loc_address
-
-    my $planet_earth =
-      $R->find_set({
-		    label => 'planet_earth',
-		    is => $location,
-		    pc_old_topic_id => 144335,
-		    has_cyc_id => 'PlanetEarth',
-		    has_wikipedia_id => 'Earth',
-		   });
-
-    my $sweden =
-      $R->find_set({
-		    label => 'sweden',
-		    is => $location,
-		    pc_old_topic_id => 397071,
-		    is_part_of => $planet_earth,
-		    has_wikipedia_id => 'Sweden',
-		   });
-
-    my $country =
-      $R->find_set({
-		    label => 'loc_country',
-		    scof => $location,
-		    pc_old_topic_id => 129520,
-		    has_cyc_id => 'Country',
-		    has_wikipedia_id => 'Country',
-		   });
-    my $county =
-      $R->find_set({
-		    label => 'loc_county',
-		    scof => $location,
-		    pc_old_topic_id => 541764,
-		    has_cyc_id => 'County',
-		    has_wikipedia_id => 'County',
-		   });
-
-    my $municipality =
-      $R->find_set({
-		    label => 'loc_municipality',
-		    scof => $location,
-		    has_cyc_id => 'Municipality',
-		    can_be_part_of => $county,
-		    has_wikipedia_id => 'Municipality',
-		   });
-
-    my $city =
-      $R->find_set({
-		    label => 'loc_city',
-		    scof => $location,
-		    pc_old_topic_id => 129524,
-		    has_cyc_id => 'City',
-		    can_be_part_of => $municipality,
-		    has_wikipedia_id => 'City',
-		   });
-
-    my $parish =
-      $R->find_set({
-		    label => 'loc_parish',
-		    scof => $location,
-		    can_be_part_of => $municipality,
-		    has_wikipedia_id => 'Parish_(country_subdivision)',
-		   });
-
-    my $zipcode =
-      $R->find_set({
-		    label => 'loc_zipcode',
-		    scof => $location,
-		    admin_comment => "A specialization of ContactInfoString. Each instance of PostalCode is a character string used by a postal service to designate a particular geographic area.",
-		    has_cyc_id => 'InternationalPostalCode',
-		    can_be_part_of => $city,
-		    has_wikipedia_id => 'Postal_code',
-		   });
-
-
-    #### COMMIT
-    $R->commit;
-
-
-    my %countyidx;
-  COUNTY:
-    {
-	my $countylist = $odbix->select_list('from county');
-	my( $countyrec, $countyerror ) = $countylist->get_first;
-	while(! $countyerror )
-	{
-	    my $id = sprintf "%.2d", $countyrec->{'county'};
-	    $countyidx{ $id } =
-	      $R->create({
-			  name => $countyrec->{county_name},
-			  code => $id,
-			  name_short => $countyrec->{county_code},
-			  is => $county,
-			  is_part_of => $sweden,
-			 });
-	}
-	continue
-	{
-	    ( $countyrec, $countyerror ) = $countylist->get_next;
-	}
-    }
-
-    my %cityidx;
-  CITY:
-    {
-	debug "retrieving list of all cities";
-	my $citylist = $odbix->select_list('from city');
-	my( $cityrec, $cityerror ) = $citylist->get_first;
-	while(! $cityerror )
-	{
-	    $cityidx{ $cityrec->{'city'} } =
-	      $R->create({
-			  name => ucfirst lc $cityrec->{city_name},
-			  is => $city,
-			  is_part_of => $countyidx{ $cityrec->{city_l} },
-			  geo_x => $cityrec->{city_x},
-			  geo_y => $cityrec->{city_y},
-			 });
-	}
-	continue
-	{
-	    ( $cityrec, $cityerror ) = $citylist->get_next;
-	}
-    }
-
-    my %munidx;
-  MUNICIPALITY:
-    {
-	debug "retrieving list of all municipalities";
-	my $munlist = $odbix->select_list('from municipality');
-	my( $munrec, $munerror ) = $munlist->get_first;
-	while(! $munerror )
-	{
-	    $munidx{ $munrec->{'municipality'} } =
-	      $R->create({
-			  name => $munrec->{municipality_name},
-			  is => $municipality,
-			  code => $munrec->{municipality},
-			  is_part_of => $countyidx{ $munrec->{municipality_l} },
-			 });
-	}
-	continue
-	{
-	    ( $munrec, $munerror ) = $munlist->get_next;
-	}
-    }
-
-    my %parishidx;
-  PARISH:
-    {
-	debug "retrieving list of all parishes";
-	my $parishlist = $odbix->select_list('from parish');
-	my( $parishrec, $parisherror ) = $parishlist->get_first;
-	while(! $parisherror )
-	{
-	    $parishidx{ $parishrec->{'parish'} } =
-	      $R->create({
-			  name => $parishrec->{parish_name},
-			  is => $parish,
-			  code => $parishrec->{parish},
-			  is_part_of => $munidx{ $parishrec->{parish_lk} },
-			 });
-	}
-	continue
-	{
-	    ( $parishrec, $parisherror ) = $parishlist->get_next;
-	}
-    }
-
-
-    # Now bring the official codes up to date for 2009
-    #
-    debug "Setting up LKF 2009";
-    open LKF, '<', $Para::CFG->{'pc_root'}.'/doc/lkf2009.txt' or die $!;
-    while(my $line = <LKF>)
-    {
-	chomp $line;
-	next unless $line;
-
-	utf8::decode( $line );
-	my( $key, $val ) = split /=/, $line;
-	my( $l, $k, $f ) = $key =~ /^(..)(..)?(..)?/;
-
-	if( $f )
-	{
-	    debug "F $key = $val";
-	    $parishidx{ $key } =
-	      $R->create({
-			  name => $val,
-			  is => $parish,
-			  code => $key,
-			  is_part_of =>  $munidx{ $l.$k },
-			 });
-	}
-	elsif( $k )
-	{
-	    debug "K $key = $val";
-	    $munidx{ $key } =
-	      $R->create({
-			  name => $val,
-			  is => $municipality,
-			  code => $key,
-			  is_part_of => $countyidx{ $l },
-			 });
-	}
-	elsif( $l )
-	{
-	    debug "L $key = $val";
-	    # Done above
-	}
-	else
-	{
-	    die "Could not parse key $key";
-	}
-    }
-
-
-
-
-
-
-
-
-  ZIPCODE:
-    {
-	my %trans =
-	  (
-	   1917 => '0331',
-	  );
-
-	debug "retrieving list of all zipcodes";
-	my $ziplist = $odbix->select_list('from zip');
-	my( $ziprec, $ziperror ) = $ziplist->get_first;
-	while(! $ziperror )
-	{
-	    my $zip_city = $ziprec->{zip_city};
-	    my $zip_lk = sprintf "%.4d", $ziprec->{zip_lk};
-
-	    if( $trans{$zip_lk} ){ $zip_lk = $trans{$zip_lk} };
-
-
-	    unless( $cityidx{ $zip_city } )
-	    {
-		dlog "City $zip_city not found in city index";
-		next;
-	    }
-
-	    unless( $munidx{ $zip_lk } )
-	    {
-		dlog "Municipality $zip_lk not found in mun index";
-		next;
-	    }
-
-	    $R->create({
-			is => $zipcode,
-			code => $ziprec->{zip},
-			is_part_of => [
-				       $cityidx{ $zip_city },
-				       $munidx{ $zip_lk },
-				      ],
-			geo_x => $ziprec->{zip_x},
-			geo_y => $ziprec->{zip_y},
-		       });
-	}
-	continue
-	{
-	    ( $ziprec, $ziperror ) = $ziplist->get_next;
-	}
-    }
-
-
-# TODO: Import street and address
-
-#    # ADDRESS
-#    #
-#    # address_street     -
-#    # address_nr_from    pc_address_nr_from
-#    # address_nr_to      pc_address_nr_to
-#    # address_step       pc_address_nr_step
-#    # address_zip        is_part_of
-#    # address_from_x     -
-#    # address_from_y     -
-#    # address_to_x       -
-#    # address_to_y       -
-#
-#
-#    my $pc_address_nr_from =
-#      $R->find_set({
-#		    label => 'pc_address_nr_from',
-#		    is => $C_predicate,
-#		    domain => $C_login_account,
-#		    range => $pc_website_style,
-#		    admin_comment => "Old member.show_style",
-#		   });
-#
-
-
-################################
-# ApartmentBuilding
-# ModernHumanResidence
-# HumanResidence
-# PhysicalContactLocation
-# ContactLocation
-# PartiallyTangible
-
 
 
 # TODO: Import payment
@@ -1921,166 +2392,6 @@ sub setup_db
 
 
 
-
-
-######## Importing member
-  MEMBER:
-    {
-	my %map =
-	  (
-	   pc_member_id => 'member',
-	   name_short => 'nickname',
-	   pc_member_level => 'member_level',
-	   pc_latest_in => 'latest_in',
-	   pc_latest_out => 'latest_out',
-	   pc_latest_host => 'latest_host',
-	   sys_username => 'sys_uid',
-	   pc_sys_logging => 'sys_logging',
-	   pc_present_contact => 'present_contact',
-	   pc_present_activity => 'present_activity',
-	   pc_member_general_belief => 'general_belief',
-	   pc_member_general_theory => 'general_theory',
-	   pc_member_general_practice => 'general_practice',
-	   pc_member_general_editor => 'general_editor',
-	   pc_member_general_helper => 'general_helper',
-	   pc_member_general_meeter => 'general_meeter',
-	   pc_member_general_bookmark => 'general_bookmark',
-	   pc_member_general_discussion => 'general_discussion',
-	   pc_chat_nick => 'chat_nick',
-	   pc_member_newsmail_level => 'newsmail',
-	   pc_member_show_complexity_level => 'show_complexity',
-	   pc_member_show_detail_level => 'show_detail',
-	   pc_member_show_edit_level => 'show_edit',
-	   pc_show_style => 'show_style',
-	   name_given => 'name_given',
-	   name_middle => 'name_middle',
-	   name_family => 'name_family',
-	   pc_bdate_year => 'bdate_ymd_year',
-	   description => 'presentation',
-	   geo_x => 'geo_x',
-	   geo_y => 'geo_y',
-	   pc_old_topic_id => 'member_topic',
-	   pc_member_present_interests => 'present_intrests',
-	   pc_member_payment_period_length => 'member_payment_period_length',
-	   pc_member_payment_period_expire => 'member_payment_period_expire',
-	   pc_member_payment_period_cost => 'member_payment_period_cost',
-	   pc_member_payment_total => 'member_payment_total',
-	   pc_member_chat_level => 'chat_level',
-	   pc_member_present_contact_public => 'present_contact_public',
-	   pc_member_show_level => 'show_level',
-	   pc_member_present_gifts => 'present_gifts',
-	   admin_comment => 'member_comment_admin',
-	   pc_member_present_blog => 'present_blog',
-	  );
-
-	my %va =
-	  (
-	   sys_email => $C_email_address,
-	   home_online_uri => $C_website_url,
-	   home_online_icq => $address_icq,
-	   home_online_msn => $address_msn,
-	   home_tele_phone => $address_phone_stationary,
-	   home_tele_mobile => $address_phone_mobile,
-	   home_online_skype => $address_skype,
-	  );
-
-	debug "retrieving list of all members";
-
-	my $list = $odbix->select_list('from member where member_level > 4 and member > 0 order by member');
-	my( $rec, $error ) = $list->get_first;
-	while(! $error )
-	{
-	    my %mdata;
-	    foreach my $key ( keys %map )
-	    {
-		$mdata{ $key } = $rec->{ $map{ $key } };
-		debug sprintf "%s -> %s: %s\n", $key, $map{ $key }, ($rec->{ $map{ $key } }||'<undef>');
-	    }
-
-
-	    my @virt_adr;
-	    foreach my $key ( keys %va )
-	    {
-		if( $rec->{$key} )
-		{
-		    my $val = $L->new($rec->{$key},$va{$key});
-		    push @virt_adr, $val;
-		    debug "Adding virtual address ".$val->sysdesig;
-#		    push @virt_adr, $L->new($rec->{$key},$va{$key});
-		}
-	    }
-
-	    $mdata{'has_virtual_address'} = \@virt_adr;
-
-	    my @is = ($C_login_account, $person);
-	    if( $rec->{'gender'} eq 'F' )
-	    {
-#		push @is, $femenine_person;
-	    }
-	    elsif( $rec->{'gender'} eq 'M' )
-	    {
-#		push @is, $masculine_person;
-	    }
-
-	    $mdata{'is'} = \@is;
-
-
-	    my $m = $R->create( {created=>$rec->{'member_created'}} );
-	    $m->add( \%mdata, {write_access=>$m} );
-
-	    ### defailt email
-	    #
-	    if( my $sysmail_arc = $m->first_arc('has_virtual_address',
-						{'is'=>$C_email_address}) )
-	    {
-		$sysmail_arc->set_weight( 10, {force_same_version=>1} );
-		debug sprintf "Setting weight of %s to 10", $sysmail_arc->desig;
-	    }
-	    my $malist = $odbix->select_list('from mailalias where mailalias_member=?', $rec->{'member'} );
-	    my( $marec, $maerror ) = $malist->get_first;
-	    while(! $maerror )
-	    {
-		my $ea = $L->new($marec->{'mailalias'},$C_email_address);
-		$m->add({'has_virtual_address'=>$ea}, {write_access=>$m});
-	    }
-	    continue
-	    {
-		( $marec, $maerror ) = $malist->get_next;
-	    }
-
-	    ### default nick
-	    #
-	    my $nick_arc = $m->first_arc('name_short');
-	    $nick_arc->set_weight( 10, {force_same_version=>1} );
-	    debug sprintf "Setting weight of %s to 10", $nick_arc->desig;
-	    my $nick = $nick_arc->value;
-	    my $nicklist = $odbix->select_list('from nick where nick_member=?', $rec->{'member'} );
-	    my( $nickrec, $nickerror ) = $nicklist->get_first;
-	    while(! $nickerror )
-	    {
-		my $anick = $nickrec->{'uid'};
-		next if $anick eq 'root';
-		next if valclean($anick) eq $nick->clean_plain;
-		my $nick = $L->new($nickrec->{'uid'},$C_text);
-		$m->add({'name_short'=>$nick}, {write_access=>$m});
-	    }
-	    continue
-	    {
-		( $nickrec, $nickerror ) = $nicklist->get_next;
-	    }
-
-	    ### Password
-	    #
-	    my $pwdrec = $odbix->select_record('from passwd where passwd_member=?', $rec->{'member'} );
-	    my $pwd = $L->new($pwdrec->{'passwd'},$C_password);
-	    #### TODO:  Waiting with password til they get more secure
-#	    $m->add({'has_password'=>$pwd}, {read_access=>$m,write_access=>$m});
-	}
-	continue
-	{
-	    ( $rec, $error ) = $list->get_next;
-	}
-    };
 
 
 
@@ -2186,32 +2497,6 @@ sub setup_db
     # rel_indirect  -
     # rel_implicit  -
 
-  TOPIC:
-    {
-	$R->commit;
-
-	debug "======= retrieving list of all topics and rels";
-	my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t >= 0 and t_entry is false order by t');
-	my( $rec, $error ) = $list->get_first;
-	while(! $error )
-	{
-	    if( my $n = import_topic_main( $rec->{'t'}, $rec ) )
-	    {
-		import_topic_arcs( $n );
-	    }
-
-#	    unless( $list->index % 10 )
-#	    {
-		dlog sprintf "==== %7d", $list->index;
-#	    }
-	}
-	continue
-	{
-	    ( $rec, $error ) = $list->get_next;
-	}
-    };
-
-
 
 
     # TS
@@ -2230,26 +2515,6 @@ sub setup_db
     # ts_score     -
     # ts_active    -
     # ts_createdby -
-
-    $R->commit;
-
-  TS:
-    {
-	debug "======= retrieving list of all topic statements";
-	my $list = $odbix->select_list('from ts where ts_active is true and ts_status > 2 order by ts_entry');
-	my( $rec, $error ) = $list->get_first;
-	while(! $error )
-	{
-	    my $e = import_topic( $rec->{ts_entry} );
-	    my $t = import_topic( $rec->{ts_topic} );
-	    $e->add_arc({'cia' => $t});
-	}
-	continue
-	{
-	    ( $rec, $error ) = $list->get_next;
-	}
-    };
-
 
 
     # TALIAS
@@ -2283,246 +2548,6 @@ sub setup_db
 		  admin_comment => "Old talias.talias_index",
 		 });
 
-    $R->commit;
-
-  TALIAS:
-    {
-	debug "======= retrieving list of all topic aliases";
-	my $list = $odbix->select_list('from talias where talias_active is true and talias_status > 3 order by talias_t');
-	my( $rec, $error ) = $list->get_first;
-	while(! $error )
-	{
-	    my $t = import_topic( $rec->{talias_t} );
-	    my $str = $rec->{talias};
-
-	    debug "Alias $str for ".$t->sysdesig;
-
-#	    debug $t->list('name')->sysdesig;
-
-	    my $al;
-	    foreach my $eal ( $t->list('name')->as_array )
-	    {
-		if( lc($eal->plain) eq lc($str) )
-		{
-		    $al = $eal;
-		    last;
-		}
-	    }
-
-	    unless( $al )
-	    {
-		$al = $L->new($str,$C_term);
-		$t->add({'name'=>$al});
-	    }
-
-	    my %props;
-	    if( $rec->{talias_autolink} )
-	    {
-		$props{pca_autolink} = 1;
-	    }
-
-	    if( $rec->{talias_index} )
-	    {
-		$props{pca_index} = 1;
-	    }
-
-	    $props{url_part} = $rec->{talias_urlpart};
-
-	    if( $rec->{talias_language} )
-	    {
-		my $lang =  import_topic( $rec->{talias_language} );
-		$props{is_of_language} = $lang;
-	    }
-
-	    # TODO: Set the creator and created date of literal
-	    $al->add(\%props);
-	}
-	continue
-	{
-	    ( $rec, $error ) = $list->get_next;
-	}
-    };
-
-
-    # MEDIA
-    #
-    # media                 ...
-    # media_mimetype        is ...?
-    # media_url             has_url
-    # media_checked_working -
-    # media_checked_failed  -
-    # media_speed           -
-
-    # This is all mimetypes used in old db;
-    #   application/pdf
-    #   email
-    #   image/gif
-    #   image/jpeg
-    #   image/png
-    #   image/svg+xml
-    #   text/html
-    #   text/plain
-
-    my %mtype;
-
-    my $computer_file_ais
-      = $R->find_set({
-		      label => 'computer_file_ais',
-		      admin_comment => "Each instance of ComputerFile-AIS is an abstract series of bits encoding some information and conforming to some file system protocol.",
-		      scof => $abis,
-		      has_cyc_id => 'ComputerFile-AIS',
-		     });
-
-    my $computer_file_type_by_format
-      = $R->find_set({
-		      label => 'computer_file_type_by_format',
-		      admin_comment => "A collection of collections of computer files [ComputerFile-AIS]. Each instance of ComputerFileTypeByFormat (e.g. JPEGFile) is a collection of all ComputerFile-AISs that conform to a single preestablished layout for electronic data. Programs accept data as input in a certain format, process it, and provide it as output in the same or another format. This constant refers to the format of the data. For every instance of ComputerFileCopy, one can assert a fileFormat for it.",
-		      is => $class, # SecondOrderCollection
-		      has_cyc_id => 'ComputerFileTypeByFormat',
-		     });
-
-    $mtype{'application/pdf'}
-      = $R->find_set({
-		      label => 'file_pdf',
-		      admin_comment => "Computer files encoded in the PDF file format.",
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      has_cyc_id => 'PortableDocumentFormatFile',
-		      code => 'application/pdf',
-		     });
-
-    $mtype{'email'}
-      = $R->find_set({
-		      label => 'file_email',
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      has_cyc_id => 'EMailFile',
-		      code => 'email',
-		     });
-
-    my $file_image
-      = $R->find_set({
-		      label => 'file_image',
-		      admin_comment => "A specialization of ComputerFile-AIS. Each ComputerImageFile contains a digital representation of some VisualImage, and is linked to an instance of ComputerImageFileTypeByFormat via the predicate fileFormat.",
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      has_cyc_id => 'ComputerImageFile',
-		     });
-
-    $mtype{'image/gif'}
-      = $R->find_set({
-		      label => 'file_gif',
-		      admin_comment => "A collection of ComputerImageFiles. Each GIFFile is encoded in the \"Graphics Interchange Format\". GIFFiles are extremely common for inline images on web pages, and generally have filenames that end in \".gif\".",
-		      is => $computer_file_type_by_format,
-		      scof => $file_image,
-		      has_cyc_id => 'GIFFile',
-		      code => 'image/gif',
-		     });
-
-    $mtype{'image/jpeg'}
-      = $R->find_set({
-		      label => 'file_jpeg',
-		      admin_comment => "A collection of ComputerImageFiles. Each JPEGFile is a ComputerImageFile whose fileFormat conforms to the standard image compression algorithm designed by the Joint Photographic Experts Group for compressing either full-colour or grey-scale digital images of 'natural', real-world scenes. Instances of JPEGFile often have filenames that end in '.jpg' or '.jpeg'.",
-		      is => $computer_file_type_by_format,
-		      scof => $file_image,
-		      has_cyc_id => 'JPEGFile',
-		      code => 'image/jpeg',
-		     });
-
-    $mtype{'image/png'}
-      = $R->find_set({
-		      label => 'file_png',
-		      admin_comment => "The collection of computer image files encoded in the '.png' file format. Designed to replace GIF files, PNG files have three main advantages: alpha channels (variable transparency), gamma correction (cross-platform control of image brightness) and two-dimensional interlacing.",
-		      is => $computer_file_type_by_format,
-		      scof => $file_image,
-		      has_cyc_id => 'PortableNetworkGraphicsFile',
-		      code => 'image/png',
-		     });
-
-    $mtype{'image/svg+xml'}
-      = $R->find_set({
-		      label => 'file_svg',
-		      admin_comment => "An SVG image file",
-		      is => $computer_file_type_by_format,
-		      scof => $file_image,
-		      code => 'image/svg+xml',
-		     });
-
-    $mtype{'text/html'}
-      = $R->find_set({
-		      label => 'file_html',
-		      admin_comment => "The subcollection of ComputerFile-AIS written in the language HypertextMarkupLanguage.",
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      has_cyc_id => 'HTMLFile',
-		      code => 'text/html',
-		     });
-
-    $mtype{'text/plain'}
-      = $R->find_set({
-		      label => 'file_text_plain',
-		      admin_comment => "A plain text file with any charset.",
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      code => 'text/plain',
-		     });
-
-    $R->commit;
-
-  MEDIA:
-    {
-	debug "======= retrieving list of all media";
-	my $list = $odbix->select_list('from media order by media');
-	my( $rec, $error ) = $list->get_first;
-	while(! $error )
-	{
-	    my $t = import_topic( $rec->{media} );
-	    next unless $t;
-
-	    my $code_str = $rec->{'media_mimetype'};
-	    my $url_str = $rec->{'media_url'};
-
-	    $t->add({
-		     is => $mtype{$code_str},
-		     has_url => $url_str,
-		    });
-	}
-	continue
-	{
-	    ( $rec, $error ) = $list->get_next;
-	}
-    };
-
-
-
-
-    #### Specifying node types
-    {
-	my %mapis =
-	  (
-	  );
-
-	foreach my $key ( keys %mapis )
-	{
-	    my $n = import_topic( $key );
-	    $n->add({is => $mapis{$key} });
-	}
-
-	my %mapscof =
-	  (
-	   396717 => $person,
-	  );
-
-	foreach my $key ( keys %mapscof )
-	{
-	    my $n = import_topic( $key );
-	    $n->add({scof => $mapscof{$key} });
-	}
-
-
-
-    };
-
 
 
 #    ### TIME-TEST
@@ -2540,35 +2565,6 @@ sub setup_db
 #    debug $dbix->format_datetime($value_obj);
 #    die "HERE";
 
-
-
-
-
-    # Adding additional entry tree
-    debug "======= Couple imported topics to their entries";
-    sleep 10;
-    foreach my $tid ( keys %TOPIC )
-    {
-	import_topic_entries( $tid );
-    }
-
-    # Adding main parent
-    debug "======= Couple imported topics to their parents";
-    sleep 10;
-    foreach my $tid ( keys %TOPIC )
-    {
-	import_topic_parent( $tid );
-    }
-
-    debug "======= Topics import done";
-
-
-    $Para::Frame::REQ->done;
-    $req->user->set_default_propargs(undef);
-
-    print "Done!\n";
-
-    return;
 }
 
 
@@ -2769,7 +2765,7 @@ sub import_topic_entries
     my $th = $TOPIC{$id};
 
     my $n = $th->{node};
-    debug "*****  importing entries for ".$n->sysdesig;
+    dlog "*****  importing entries for ".$n->sysdesig;
 
 
     unless( $n->has_value({is=>$pc_topic}) )

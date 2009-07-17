@@ -377,6 +377,336 @@ sub setup_ts
 
 sub setup_topic
 {
+    $pc_topic = $C->get('pc_topic');
+    $pc_entry = $C->get('pc_entry');
+    $pc_featured_topic = $C->get('pc_featured_topic');
+    $word_plural = $C->get('term_plural');
+    my $media = $C->get('media');
+    $information_store = $C->get('information_store');
+    my $cw = $C->get('cw');
+    my $agent_generic = $C->get('agent_generic');
+    $mia = $C->get('mia');
+    $ia = $C->get('intelligent_agent');
+    $information_store = $C->get('information_store');
+    my $ais = $C->get('ais');
+    my $product = $C->get('product');
+    my $gtin = $C->get('gtin');
+    my $temporal_thing = $C->get('temporal_thing');
+    my $license = $C->get('license');
+    my $legal_agent = $C->get('legal_agent');
+    my $permission_ibt = $C->get('permission_ibt');
+    my $person = $C->get('person');
+    $individual = $C->get('individual');
+    my $pc_masterpiece = $C->get('pc_masterpiece');
+    $practisable = $C->get('pct_practisable');
+    my $experiencable = $C->get('pct_experiencable');
+    my $spatial_thing = $C->get('spatial_thing');
+    my $location = $C->get('location');
+    $organization = $C->get('organization');
+    my $temporal_stuff_type = $C->get('temporal_stuff_type');
+#    = $C->get('');
+#    = $C->get('');
+
+
+    # RELTYPE
+    #
+    # reltype             pc_arctype_id
+    # rel_name            name
+    # rev_name            name_rev
+    # reltype_topic       -
+    # reltype_description admin_comment
+    # reltype_updated     node(updated)
+    # reltype_changedby   node(updated_by)
+    # reltype_super       -
+    # reltype_literal     range
+
+
+    my $arctype_map =
+    {
+     0 => 'related',
+     1 => 'is',
+     2 => 'scof',
+     3 => [
+	   {
+	    pred => 'broader',
+	    has_cyc_id => 'generalizations',
+	   },
+	  ],
+     4 => [
+	   {
+	    pred => 'topic_according_to',
+	    doamin => $media,
+	    range => $information_store,
+	   },
+	   {
+	    pred => 'according_to',
+	    doamin => $pc_topic,
+	    range => $information_store,
+	   },
+	  ],
+     5 => undef,
+     6 => ['excerpt_from', $media, $cw],
+     7 => ['member_of', $agent_generic, $mia],
+     8 => ['original_creator', $information_store, $ia],
+     9 => [
+	   {
+	    pred => 'has_source',
+	    domain => $ais,
+	    range => $cw,
+	   },
+	   {
+	    rev => 1,
+	    pred => 'cia',
+	   },
+	  ],
+     10 => [
+	    {
+	     pred => 'always_offered_by',
+	     range_scof => $ia,
+	    },
+	    {
+	     pred => 'offered_by',
+	     range => $ia,
+	    },
+	   ],
+     11 => 'compares',
+     12 => [
+	    {
+	     pred => 'interested_in',
+	     domain => $agent_generic,
+	    },
+	    {
+	     pred => 'always_interested_in',
+	     domain_scof => $agent_generic,
+	    },
+	    {
+	     pred => 'cia',
+	    },
+	   ],
+     13 => ['published_date', $media, $C_date],
+     14 => ['published_by', $media, $ia],
+     15 => ['has_subtitle', $cw, $C_text],
+     16 => ['has_translator', $cw, $ia],
+     17 => ['has_gtin', $product, $gtin],
+     18 => ['has_number_of_pages', $media, $C_int],
+     19 => ['has_start_date', $temporal_thing, $C_date],
+     20 => ['has_end_date', $temporal_thing, $C_date],
+     21 => ['influenced_by', $information_store, $information_store],
+     22 => ['has_license', $media, $license],
+     23 => ['has_copyright', $media, $legal_agent],
+     24 => ['has_visiting_address', $ia, $C_text],
+     25 => undef, ### TODO: use zipcode
+     26 => undef, ### TODO: use city
+     27 => ['has_virtual_address', $ia, $C_phone_number],
+     28 => [
+	    {
+	     pred => 'has_permission',
+	     domain => $media,
+	     range => $permission_ibt,
+	    },
+	    {
+	     pred => 'gives_permission',
+	     domain => $ia,
+	     range => $permission_ibt,
+	    },
+	   ],
+     29 => [
+	    {
+	     pred => 'instances_are_member_of',
+	     domain_scof => $person,
+	     range => $mia,
+	    },
+	   ],
+     30 => ['can_be', $class, $class],
+     31 => [
+	    {
+	     pred => 'is_part_of',
+	     domain =>  $individual,
+	     range => $individual,
+	    },
+	    {
+	     pred => 'quoted_is_part_of',
+	     range => $pc_masterpiece,
+	    },
+	   ],
+     32 => [
+	    {
+	     pred => 'can_be_part_of',
+	     domain => $class,
+	     domain_scof => $individual,
+	     range => $class,
+	     range_scof => $individual,
+	    },
+	   ],
+     33 => ['is_of_language', $media, $C_language],
+     34 => [
+	    {
+	     pred => 'practise',
+	     domain => $ia,
+	     range => $practisable,
+	    },
+	    {
+	     pred => 'always_practise',
+	     domain_scof => $person,
+	     range => $practisable,
+	    },
+	   ],
+     35 => [
+	    {
+	     pred => 'has_experienced',
+	     domain => $ia,
+	     range => $experiencable,
+	    },
+	    {
+	     pred => 'always_experienced',
+	     domain_scof => $ia,
+	     range => $experiencable,
+	    },
+	   ],
+     36 => 'is_influenced_by',
+     37 => ['based_upon', $media, $media],
+     38 => ['has_epithet', $individual, $individual],
+     39 => [
+	    {
+	     pred => 'in_place',
+	     domain => $spatial_thing,
+	     range => $location,
+	    },
+	    {
+	     pred => 'org_present_in_region',
+	     domain => $organization,
+	     range => $location,
+	    },
+	   ],
+     40 => undef,
+     41 => undef,
+     42 => undef,
+     43 => ['has_postal_address', $ia, $C_text],
+     44 => ['instance_owned_by', $temporal_stuff_type, $legal_agent],
+     45 => ['has_owner', $temporal_thing, $legal_agent],
+     46 => undef,
+     47 => [
+	    {
+	     pred => 'uses',
+	     domain_scof => $temporal_thing,
+	    }
+	   ],
+     48 => [
+	    {
+	     pred => 'instances_are_part_of',
+	     domain => $class,
+	     range => $individual,
+	    },
+	   ],
+    };
+
+    my $ortl = $odbix->select_key('reltype','from reltype');
+
+    foreach my $rtid ( sort keys %$arctype_map )
+    {
+	my $defs = $arctype_map->{$rtid} or next;
+
+	unless( ref $defs )
+	{
+	    $defs = [$defs];
+	}
+
+	my( @preds_rel, @preds_rev );
+
+	unless( ref $defs->[0] )
+	{
+	    my( $pred_name, $domain, $range ) = @$defs;
+	    $defs =
+	      [{
+		pred => $pred_name,
+		domain => $domain,
+		range => $range,
+	       }];
+	}
+
+	foreach my $def (@$defs)
+	{
+	    my $pred_name = $def->{'pred'} or die;
+	    my $domain = $def->{'domain'};
+	    my $range = $def->{'range'} || $C_resource;
+	    my $domain_scof = $def->{'domain_scof'};
+	    my $range_scof = $def->{'range_scof'};
+
+	    my $ort = $ortl->{$rtid};
+
+	    # TODO: set lang to sv
+	    my $name_rel = $ort->{'rel_name'};
+	    my $name_rev = $ort->{'rev_name'};
+	    my $desc = $ort->{'reltype_description'};
+
+	    my $predl = $R->find({label=>$pred_name});
+	    my $pred;
+	    if( $predl->size )
+	    {
+		$pred = $predl->get_first_nos;
+		$pred->add({
+			    pc_old_arctype_id => $rtid,
+			    name => $name_rel,
+			   });
+	    }
+	    else
+	    {
+		$pred = $R->find_set({label => $pred_name,
+				      is => $C_predicate,
+				      pc_old_arctype_id => $rtid,
+				      name => $name_rel,
+				      range => $range,
+				     });
+
+		if( $desc )
+		{
+		    $pred->add({ admin_comment => $desc });
+		}
+	    }
+
+	    if( $domain )
+	    {
+		$pred->add({ domain => $domain });
+	    }
+
+	    if( $domain_scof )
+	    {
+		$pred->add({ domain_scof => $domain_scof });
+	    }
+
+	    if( $range_scof )
+	    {
+		$pred->add({ range_scof => $range_scof });
+	    }
+
+	    if( $name_rev )
+	    {
+		$pred->add({ name_rev => $name_rev });
+	    }
+
+	    if( $def->{'rev'} )
+	    {
+		push @preds_rev, $pred;
+	    }
+	    else
+	    {
+		push @preds_rel, $pred;
+	    }
+	}
+
+	$RELTYPE{ $rtid } =
+	{
+	 rel => \@preds_rel,
+	 rev => \@preds_rev,
+	};
+    }
+
+
+# TODO: Convert reltype 25 zipcode to geo-tree placement
+# TODO: Convert reltype 26 city to geo-tree placement
+
+
+
     dlog "======= retrieving list of all topics and rels";
     my $list = $odbix->select_list('from t where t_active is true and t_status > 1 and t >= 0 and t_entry is false order by t');
     my( $rec, $error ) = $list->get_first;
@@ -2060,305 +2390,6 @@ sub setup_base
 
 
 
-    # RELTYPE
-    #
-    # reltype             pc_arctype_id
-    # rel_name            name
-    # rev_name            name_rev
-    # reltype_topic       -
-    # reltype_description admin_comment
-    # reltype_updated     node(updated)
-    # reltype_changedby   node(updated_by)
-    # reltype_super       -
-    # reltype_literal     range
-
-
-    my $arctype_map =
-    {
-     0 => 'related',
-     1 => 'is',
-     2 => 'scof',
-     3 => [
-	   {
-	    pred => 'broader',
-	    has_cyc_id => 'generalizations',
-	   },
-	  ],
-     4 => [
-	   {
-	    pred => 'topic_according_to',
-	    doamin => $media,
-	    range => $information_store,
-	   },
-	   {
-	    pred => 'according_to',
-	    doamin => $pc_topic,
-	    range => $information_store,
-	   },
-	  ],
-     5 => undef,
-     6 => ['excerpt_from', $media, $cw],
-     7 => ['member_of', $agent_generic, $mia],
-     8 => ['original_creator', $information_store, $ia],
-     9 => [
-	   {
-	    pred => 'has_source',
-	    domain => $ais,
-	    range => $cw,
-	   },
-	   {
-	    rev => 1,
-	    pred => 'cia',
-	   },
-	  ],
-     10 => [
-	    {
-	     pred => 'always_offered_by',
-	     range_scof => $ia,
-	    },
-	    {
-	     pred => 'offered_by',
-	     range => $ia,
-	    },
-	   ],
-     11 => 'compares',
-     12 => [
-	    {
-	     pred => 'interested_in',
-	     domain => $agent_generic,
-	    },
-	    {
-	     pred => 'always_interested_in',
-	     domain_scof => $agent_generic,
-	    },
-	    {
-	     pred => 'cia',
-	    },
-	   ],
-     13 => ['published_date', $media, $C_date],
-     14 => ['published_by', $media, $ia],
-     15 => ['has_subtitle', $cw, $C_text],
-     16 => ['has_translator', $cw, $ia],
-     17 => ['has_gtin', $product, $gtin],
-     18 => ['has_number_of_pages', $media, $C_int],
-     19 => ['has_start_date', $temporal_thing, $C_date],
-     20 => ['has_end_date', $temporal_thing, $C_date],
-     21 => ['influenced_by', $information_store, $information_store],
-     22 => ['has_license', $media, $license],
-     23 => ['has_copyright', $media, $legal_agent],
-     24 => ['has_visiting_address', $ia, $C_text],
-     25 => undef, ### TODO: use zipcode
-     26 => undef, ### TODO: use city
-     27 => ['has_virtual_address', $ia, $C_phone_number],
-     28 => [
-	    {
-	     pred => 'has_permission',
-	     domain => $media,
-	     range => $permission_ibt,
-	    },
-	    {
-	     pred => 'gives_permission',
-	     domain => $ia,
-	     range => $permission_ibt,
-	    },
-	   ],
-     29 => [
-	    {
-	     pred => 'instances_are_member_of',
-	     domain_scof => $person,
-	     range => $mia,
-	    },
-	   ],
-     30 => ['can_be', $class, $class],
-     31 => [
-	    {
-	     pred => 'is_part_of',
-	     domain =>  $individual,
-	     range => $individual,
-	    },
-	    {
-	     pred => 'quoted_is_part_of',
-	     range => $pc_masterpiece,
-	    },
-	   ],
-     32 => [
-	    {
-	     pred => 'can_be_part_of',
-	     domain => $class,
-	     domain_scof => $individual,
-	     range => $class,
-	     range_scof => $individual,
-	    },
-	   ],
-     33 => ['is_of_language', $media, $C_language],
-     34 => [
-	    {
-	     pred => 'practise',
-	     domain => $ia,
-	     range => $practisable,
-	    },
-	    {
-	     pred => 'always_practise',
-	     domain_scof => $person,
-	     range => $practisable,
-	    },
-	   ],
-     35 => [
-	    {
-	     pred => 'has_experienced',
-	     domain => $ia,
-	     range => $experiencable,
-	    },
-	    {
-	     pred => 'always_experienced',
-	     domain_scof => $ia,
-	     range => $experiencable,
-	    },
-	   ],
-     36 => 'is_influenced_by',
-     37 => ['based_upon', $media, $media],
-     38 => ['has_epithet', $individual, $individual],
-     39 => [
-	    {
-	     pred => 'in_place',
-	     domain => $spatial_thing,
-	     range => $location,
-	    },
-	    {
-	     pred => 'org_present_in_region',
-	     domain => $organization,
-	     range => $location,
-	    },
-	   ],
-     40 => undef,
-     41 => undef,
-     42 => undef,
-     43 => ['has_postal_address', $ia, $C_text],
-     44 => ['instance_owned_by', $temporal_stuff_type, $legal_agent],
-     45 => ['has_owner', $temporal_thing, $legal_agent],
-     46 => undef,
-     47 => [
-	    {
-	     pred => 'uses',
-	     domain_scof => $temporal_thing,
-	    }
-	   ],
-     48 => [
-	    {
-	     pred => 'instances_are_part_of',
-	     domain => $class,
-	     range => $individual,
-	    },
-	   ],
-    };
-
-    my $ortl = $odbix->select_key('reltype','from reltype');
-
-    foreach my $rtid ( sort keys %$arctype_map )
-    {
-	my $defs = $arctype_map->{$rtid} or next;
-
-	unless( ref $defs )
-	{
-	    $defs = [$defs];
-	}
-
-	my( @preds_rel, @preds_rev );
-
-	unless( ref $defs->[0] )
-	{
-	    my( $pred_name, $domain, $range ) = @$defs;
-	    $defs =
-	      [{
-		pred => $pred_name,
-		domain => $domain,
-		range => $range,
-	       }];
-	}
-
-	foreach my $def (@$defs)
-	{
-	    my $pred_name = $def->{'pred'} or die;
-	    my $domain = $def->{'domain'};
-	    my $range = $def->{'range'} || $C_resource;
-	    my $domain_scof = $def->{'domain_scof'};
-	    my $range_scof = $def->{'range_scof'};
-
-	    my $ort = $ortl->{$rtid};
-
-	    # TODO: set lang to sv
-	    my $name_rel = $ort->{'rel_name'};
-	    my $name_rev = $ort->{'rev_name'};
-	    my $desc = $ort->{'reltype_description'};
-
-	    my $predl = $R->find({label=>$pred_name});
-	    my $pred;
-	    if( $predl->size )
-	    {
-		$pred = $predl->get_first_nos;
-		$pred->add({
-			    pc_old_arctype_id => $rtid,
-			    name => $name_rel,
-			   });
-	    }
-	    else
-	    {
-		$pred = $R->find_set({label => $pred_name,
-				      is => $C_predicate,
-				      pc_old_arctype_id => $rtid,
-				      name => $name_rel,
-				      range => $range,
-				     });
-
-		if( $desc )
-		{
-		    $pred->add({ admin_comment => $desc });
-		}
-	    }
-
-	    if( $domain )
-	    {
-		$pred->add({ domain => $domain });
-	    }
-
-	    if( $domain_scof )
-	    {
-		$pred->add({ domain_scof => $domain_scof });
-	    }
-
-	    if( $range_scof )
-	    {
-		$pred->add({ range_scof => $range_scof });
-	    }
-
-	    if( $name_rev )
-	    {
-		$pred->add({ name_rev => $name_rev });
-	    }
-
-	    if( $def->{'rev'} )
-	    {
-		push @preds_rev, $pred;
-	    }
-	    else
-	    {
-		push @preds_rel, $pred;
-	    }
-	}
-
-	$RELTYPE{ $rtid } =
-	{
-	 rel => \@preds_rel,
-	 rev => \@preds_rev,
-	};
-    }
-
-
-# TODO: Convert reltype 25 zipcode to geo-tree placement
-# TODO: Convert reltype 26 city to geo-tree placement
-
-
-
 
 
 
@@ -2621,18 +2652,25 @@ sub import_topic_main
     }
 
 
-###    my $created_by = $R->get({pc_member_id => $rec->{'t_createdby'}});
-
     my $title;
 
     my %prop =
       (
-#       pc_old_topic_id => $id,
        created => $rec->{'t_created'},
-###       created_by => $created_by,
        description => $rec->{'t_text'},
        is => [],
       );
+
+    my $pc_member_id = $rec->{'t_createdby'};
+    my $created_by;
+    if( $pc_member_id > 0 )
+    {
+	my $creator = $R->find({pc_member_id => $pc_member_id})->get_first_nos;
+	if( $creator )
+	{
+	    $prop{created_by} = $creator;
+	}
+    }
 
     $TOPIC{$id} = {};
 
@@ -2765,7 +2803,7 @@ sub import_topic_entries
     my $th = $TOPIC{$id};
 
     my $n = $th->{node};
-    dlog "*****  importing entries for ".$n->sysdesig;
+    debug "*****  importing entries for ".$n->sysdesig;
 
 
     unless( $n->has_value({is=>$pc_topic}) )
@@ -2885,7 +2923,7 @@ sub import_topic_arcs
 	return;
     }
 
-    debug "initiating ".$n->sysdesig;
+    debug "initiating 2 ".$n->sysdesig;
 
     $n->{p4_imported_arcs_partial} = 1;
 
@@ -2909,7 +2947,7 @@ sub import_topic_arcs
 	debug $n->sysdesig." has no rels";
     }
 
-    debug "INITIATED  ".$n->sysdesig;
+    debug "INITIATED  2 ".$n->sysdesig;
 
     $n->{p4_imported_arcs} = 1;
 }
@@ -2929,7 +2967,7 @@ sub import_topic_arcs_primary
 	return;
     }
 
-    debug "initiating ".$n->sysdesig;
+    debug "initiating 1 ".$n->sysdesig;
 
     $n->{p4_imported_arcs_primary_partial} = 1;
 
@@ -2951,7 +2989,7 @@ sub import_topic_arcs_primary
 	debug $n->sysdesig." has no rels";
     }
 
-    debug "INITIATED  ".$n->sysdesig;
+    debug "INITIATED  1 ".$n->sysdesig;
 
     $n->{p4_imported_arcs_primary} = 1;
 }
@@ -2964,6 +3002,7 @@ sub import_topic_arc
     my( $rec ) = @_;
 
     my $id = $rec->{rel_topic};
+    debug "IMPORTING ARC $id";
     return $TOPIC{$id}{node} if $TOPIC{$id};
 
     my $subj_in = import_topic( $rec->{rev} );
@@ -3095,16 +3134,24 @@ sub import_topic_arc
 	}
 
 
-###	my $created_by = $R->get({pc_member_id => $rec->{'rel_createdby'}});
-
 	my %props =
 	  (
 	   subj => $subj->id,
 	   pred => $pred,
 	   arc_weight => $rec->{rel_strength},
-###	   created_by => $created_by,
 	   created => $rec->{created},
 	  );
+
+	my $pc_member_id = $rec->{'rel_createdby'};
+	my $created_by;
+	if( $pc_member_id > 0 )
+	{
+	    my $creator = $R->find({pc_member_id => $pc_member_id})->get_first_nos;
+	    if( $creator )
+	    {
+		$props{created_by} = $creator;
+	    }
+	}
 
 
 	if( $pred_obj->objtype )

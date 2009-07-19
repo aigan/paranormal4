@@ -49,6 +49,32 @@ sub setup_db
 	return;
     }
 
+
+    init();
+
+    given( $ARGV[1] )
+    {
+	when(1){ setup_base() }
+	when(2){ setup_location() }
+	when(3){ setup_member() }
+	when(4){ setup_topic() }
+	when(5){ setup_ts() }
+	when(6){ setup_talias() }
+	when(7){ setup_media() }
+    }
+
+
+
+    $Para::Frame::REQ->done;
+    $req->user->set_default_propargs(undef);
+
+    print "Done!\n";
+
+    return;
+}
+
+sub init
+{
     $req = Para::Frame::Request->new_bgrequest();
 
     $R = Rit::Base->Resource;
@@ -83,6 +109,8 @@ sub setup_db
     debug "------------------------------------";
 
 
+
+
     $ia                  = $C->get('intelligent_agent');
     $class               = $C->get('class');
     $C_website_url       = $C->get('website_url');
@@ -102,283 +130,12 @@ sub setup_db
     $C_phone_number      = $C->get('phone_number');
     $C_language          = $C->get('language');
     $C_password          = $C->get('password');
+    $pc_topic            = $C->get('pc_topic');
+    $pc_entry            = $C->get('pc_entry');
 
 
 
-    given( $ARGV[1] )
-    {
-	when(1){ setup_base() }
-	when(2){ setup_location() }
-	when(3){ setup_member() }
-	when(4){ setup_topic() }
-	when(5){ setup_ts() }
-	when(6){ setup_talias() }
-	when(7){ setup_media() }
-    }
 
-
-
-    $Para::Frame::REQ->done;
-    $req->user->set_default_propargs(undef);
-
-    print "Done!\n";
-
-    return;
-}
-
-sub setup_media
-{
-    # MEDIA
-    #
-    # media                 ...
-    # media_mimetype        is ...?
-    # media_url             has_url
-    # media_checked_working -
-    # media_checked_failed  -
-    # media_speed           -
-
-    # This is all mimetypes used in old db;
-    #   application/pdf
-    #   email
-    #   image/gif
-    #   image/jpeg
-    #   image/png
-    #   image/svg+xml
-    #   text/html
-    #   text/plain
-
-    my %mtype;
-
-    my $computer_file_ais
-      = $R->find_set({
-		      label => 'computer_file_ais',
-		      admin_comment => "Each instance of ComputerFile-AIS is an abstract series of bits encoding some information and conforming to some file system protocol.",
-		      scof => $C->get('abis'),
-		      has_cyc_id => 'ComputerFile-AIS',
-		     });
-
-    my $computer_file_type_by_format
-      = $R->find_set({
-		      label => 'computer_file_type_by_format',
-		      admin_comment => "A collection of collections of computer files [ComputerFile-AIS]. Each instance of ComputerFileTypeByFormat (e.g. JPEGFile) is a collection of all ComputerFile-AISs that conform to a single preestablished layout for electronic data. Programs accept data as input in a certain format, process it, and provide it as output in the same or another format. This constant refers to the format of the data. For every instance of ComputerFileCopy, one can assert a fileFormat for it.",
-		      is => $class, # SecondOrderCollection
-		      has_cyc_id => 'ComputerFileTypeByFormat',
-		     });
-
-    $mtype{'application/pdf'}
-      = $R->find_set({
-		      label => 'file_pdf',
-		      admin_comment => "Computer files encoded in the PDF file format.",
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      has_cyc_id => 'PortableDocumentFormatFile',
-		      code => 'application/pdf',
-		     });
-
-    $mtype{'email'}
-      = $R->find_set({
-		      label => 'file_email',
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      has_cyc_id => 'EMailFile',
-		      code => 'email',
-		     });
-
-    my $file_image
-      = $R->find_set({
-		      label => 'file_image',
-		      admin_comment => "A specialization of ComputerFile-AIS. Each ComputerImageFile contains a digital representation of some VisualImage, and is linked to an instance of ComputerImageFileTypeByFormat via the predicate fileFormat.",
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      has_cyc_id => 'ComputerImageFile',
-		     });
-
-    $mtype{'image/gif'}
-      = $R->find_set({
-		      label => 'file_gif',
-		      admin_comment => "A collection of ComputerImageFiles. Each GIFFile is encoded in the \"Graphics Interchange Format\". GIFFiles are extremely common for inline images on web pages, and generally have filenames that end in \".gif\".",
-		      is => $computer_file_type_by_format,
-		      scof => $file_image,
-		      has_cyc_id => 'GIFFile',
-		      code => 'image/gif',
-		     });
-
-    $mtype{'image/jpeg'}
-      = $R->find_set({
-		      label => 'file_jpeg',
-		      admin_comment => "A collection of ComputerImageFiles. Each JPEGFile is a ComputerImageFile whose fileFormat conforms to the standard image compression algorithm designed by the Joint Photographic Experts Group for compressing either full-colour or grey-scale digital images of 'natural', real-world scenes. Instances of JPEGFile often have filenames that end in '.jpg' or '.jpeg'.",
-		      is => $computer_file_type_by_format,
-		      scof => $file_image,
-		      has_cyc_id => 'JPEGFile',
-		      code => 'image/jpeg',
-		     });
-
-    $mtype{'image/png'}
-      = $R->find_set({
-		      label => 'file_png',
-		      admin_comment => "The collection of computer image files encoded in the '.png' file format. Designed to replace GIF files, PNG files have three main advantages: alpha channels (variable transparency), gamma correction (cross-platform control of image brightness) and two-dimensional interlacing.",
-		      is => $computer_file_type_by_format,
-		      scof => $file_image,
-		      has_cyc_id => 'PortableNetworkGraphicsFile',
-		      code => 'image/png',
-		     });
-
-    $mtype{'image/svg+xml'}
-      = $R->find_set({
-		      label => 'file_svg',
-		      admin_comment => "An SVG image file",
-		      is => $computer_file_type_by_format,
-		      scof => $file_image,
-		      code => 'image/svg+xml',
-		     });
-
-    $mtype{'text/html'}
-      = $R->find_set({
-		      label => 'file_html',
-		      admin_comment => "The subcollection of ComputerFile-AIS written in the language HypertextMarkupLanguage.",
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      has_cyc_id => 'HTMLFile',
-		      code => 'text/html',
-		     });
-
-    $mtype{'text/plain'}
-      = $R->find_set({
-		      label => 'file_text_plain',
-		      admin_comment => "A plain text file with any charset.",
-		      is => $computer_file_type_by_format,
-		      scof => $computer_file_ais,
-		      code => 'text/plain',
-		     });
-
-
-    #### Specifying node types
-    {
-	my %mapis =
-	  (
-	  );
-
-	foreach my $key ( keys %mapis )
-	{
-	    my $n = import_topic( $key );
-	    $n->add({is => $mapis{$key} });
-	}
-
-	my %mapscof =
-	  (
-	   396717 => $C->get('person'),
-	  );
-
-	foreach my $key ( keys %mapscof )
-	{
-	    my $n = import_topic( $key );
-	    $n->add({scof => $mapscof{$key} });
-	}
-
-
-
-    };
-
-
-    dlog "======= retrieving list of all media";
-    my $list = $odbix->select_list('from media order by media');
-    my( $rec, $error ) = $list->get_first;
-    while(! $error )
-    {
-	my $t = import_topic( $rec->{media} );
-	next unless $t;
-
-	my $code_str = $rec->{'media_mimetype'};
-	my $url_str = $rec->{'media_url'};
-
-	$t->add({
-		 is => $mtype{$code_str},
-		 has_url => $url_str,
-		});
-    }
-    continue
-    {
-	( $rec, $error ) = $list->get_next;
-    }
-}
-
-sub setup_talias
-{
-    dlog "======= retrieving list of all topic aliases";
-    my $list = $odbix->select_list('from talias where talias_active is true and talias_status > 3 order by talias_t');
-    my( $rec, $error ) = $list->get_first;
-    while(! $error )
-    {
-	my $t = import_topic( $rec->{talias_t} );
-	my $str = $rec->{talias};
-
-	debug "Alias $str for ".$t->sysdesig;
-
-	my $al;
-	foreach my $eal ( $t->list('name')->as_array )
-	{
-	    if( lc($eal->plain) eq lc($str) )
-	    {
-		$al = $eal;
-		last;
-	    }
-	}
-
-	unless( $al )
-	{
-	    $al = $L->new($str,$C_term);
-	    $t->add({'name'=>$al});
-	}
-
-	my %props;
-	if( $rec->{talias_autolink} )
-	{
-	    $props{pca_autolink} = 1;
-	}
-
-	if( $rec->{talias_index} )
-	{
-	    $props{pca_index} = 1;
-	}
-
-	$props{url_part} = $rec->{talias_urlpart};
-
-	if( $rec->{talias_language} )
-	{
-	    my $lang =  import_topic( $rec->{talias_language} );
-	    $props{is_of_language} = $lang;
-	}
-
-	# TODO: Set the creator and created date of literal
-	$al->add(\%props);
-    }
-    continue
-    {
-	( $rec, $error ) = $list->get_next;
-    }
-}
-
-sub setup_ts
-{
-    dlog "======= retrieving list of all topic statements";
-    my $list = $odbix->select_list('from ts where ts_active is true and ts_status > 2 order by ts_entry');
-    my( $rec, $error ) = $list->get_first;
-    while(! $error )
-    {
-	my $e = import_topic( $rec->{ts_entry} );
-	my $t = import_topic( $rec->{ts_topic} );
-	$e->add_arc({'cia' => $t});
-    }
-    continue
-    {
-	( $rec, $error ) = $list->get_next;
-    }
-}
-
-sub setup_topic
-{
-    $pc_topic = $C->get('pc_topic');
-    $pc_entry = $C->get('pc_entry');
     $pc_featured_topic = $C->get('pc_featured_topic');
     $word_plural = $C->get('term_plural');
     my $media = $C->get('media');
@@ -701,6 +458,288 @@ sub setup_topic
 	};
     }
 
+}
+
+sub setup_media
+{
+    # MEDIA
+    #
+    # media                 ...
+    # media_mimetype        is ...?
+    # media_url             has_url
+    # media_checked_working -
+    # media_checked_failed  -
+    # media_speed           -
+
+    # This is all mimetypes used in old db;
+    #   application/pdf
+    #   email
+    #   image/gif
+    #   image/jpeg
+    #   image/png
+    #   image/svg+xml
+    #   text/html
+    #   text/plain
+
+    my %mtype;
+
+    my $computer_file_ais
+      = $R->find_set({
+		      label => 'computer_file_ais',
+		      admin_comment => "Each instance of ComputerFile-AIS is an abstract series of bits encoding some information and conforming to some file system protocol.",
+		      scof => $C->get('abis'),
+		      has_cyc_id => 'ComputerFile-AIS',
+		     });
+
+    my $computer_file_type_by_format
+      = $R->find_set({
+		      label => 'computer_file_type_by_format',
+		      admin_comment => "A collection of collections of computer files [ComputerFile-AIS]. Each instance of ComputerFileTypeByFormat (e.g. JPEGFile) is a collection of all ComputerFile-AISs that conform to a single preestablished layout for electronic data. Programs accept data as input in a certain format, process it, and provide it as output in the same or another format. This constant refers to the format of the data. For every instance of ComputerFileCopy, one can assert a fileFormat for it.",
+		      is => $class, # SecondOrderCollection
+		      has_cyc_id => 'ComputerFileTypeByFormat',
+		     });
+
+    $mtype{'application/pdf'}
+      = $R->find_set({
+		      label => 'file_pdf',
+		      admin_comment => "Computer files encoded in the PDF file format.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'PortableDocumentFormatFile',
+		      code => 'application/pdf',
+		     });
+
+    $mtype{'email'}
+      = $R->find_set({
+		      label => 'file_email',
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'EMailFile',
+		      code => 'email',
+		     });
+
+    my $file_image
+      = $R->find_set({
+		      label => 'file_image',
+		      admin_comment => "A specialization of ComputerFile-AIS. Each ComputerImageFile contains a digital representation of some VisualImage, and is linked to an instance of ComputerImageFileTypeByFormat via the predicate fileFormat.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'ComputerImageFile',
+		     });
+
+    $mtype{'image/gif'}
+      = $R->find_set({
+		      label => 'file_gif',
+		      admin_comment => "A collection of ComputerImageFiles. Each GIFFile is encoded in the \"Graphics Interchange Format\". GIFFiles are extremely common for inline images on web pages, and generally have filenames that end in \".gif\".",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      has_cyc_id => 'GIFFile',
+		      code => 'image/gif',
+		     });
+
+    $mtype{'image/jpeg'}
+      = $R->find_set({
+		      label => 'file_jpeg',
+		      admin_comment => "A collection of ComputerImageFiles. Each JPEGFile is a ComputerImageFile whose fileFormat conforms to the standard image compression algorithm designed by the Joint Photographic Experts Group for compressing either full-colour or grey-scale digital images of 'natural', real-world scenes. Instances of JPEGFile often have filenames that end in '.jpg' or '.jpeg'.",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      has_cyc_id => 'JPEGFile',
+		      code => 'image/jpeg',
+		     });
+
+    $mtype{'image/png'}
+      = $R->find_set({
+		      label => 'file_png',
+		      admin_comment => "The collection of computer image files encoded in the '.png' file format. Designed to replace GIF files, PNG files have three main advantages: alpha channels (variable transparency), gamma correction (cross-platform control of image brightness) and two-dimensional interlacing.",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      has_cyc_id => 'PortableNetworkGraphicsFile',
+		      code => 'image/png',
+		     });
+
+    $mtype{'image/svg+xml'}
+      = $R->find_set({
+		      label => 'file_svg',
+		      admin_comment => "An SVG image file",
+		      is => $computer_file_type_by_format,
+		      scof => $file_image,
+		      code => 'image/svg+xml',
+		     });
+
+    $mtype{'text/html'}
+      = $R->find_set({
+		      label => 'file_html',
+		      admin_comment => "The subcollection of ComputerFile-AIS written in the language HypertextMarkupLanguage.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      has_cyc_id => 'HTMLFile',
+		      code => 'text/html',
+		     });
+
+    $mtype{'text/plain'}
+      = $R->find_set({
+		      label => 'file_text_plain',
+		      admin_comment => "A plain text file with any charset.",
+		      is => $computer_file_type_by_format,
+		      scof => $computer_file_ais,
+		      code => 'text/plain',
+		     });
+
+
+    #### Specifying node types
+    {
+	my %mapis =
+	  (
+	  );
+
+	foreach my $key ( keys %mapis )
+	{
+	    my $n = import_topic( $key );
+	    $n->add({is => $mapis{$key} });
+	}
+
+	my %mapscof =
+	  (
+	   396717 => $C->get('person'),
+	  );
+
+	foreach my $key ( keys %mapscof )
+	{
+	    my $n = import_topic( $key );
+	    $n->add({scof => $mapscof{$key} });
+	}
+
+
+
+    };
+
+
+    dlog "======= retrieving list of all media";
+    my $list = $odbix->select_list('from media order by media');
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	my $t = import_topic( $rec->{media} );
+	next unless $t;
+
+	my $code_str = $rec->{'media_mimetype'};
+	my $url_str = $rec->{'media_url'};
+
+	$t->add({
+		 is => $mtype{$code_str},
+		 has_url => $url_str,
+		});
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+}
+
+sub setup_talias
+{
+    my %lmap =
+      (
+       396600 => 'he',
+       421094 => 'x1',
+       622738 => 'da',
+       33683  => 'x2',
+       155326 => 'la',
+       155144 => 'sa',
+       407524 => 'el',
+       414104 => 'fr',
+       585257 => 'es',
+       584348 => 'fa',
+       664742 => 'eo',
+       474370 => 'ar',
+       478120 => 'de',
+       559563 => 'is',
+       572592 => 'nb',
+       581265 => 'ru',
+       580630 => 'it',
+       590647 => 'fi',
+      );
+
+    foreach my $tid ( keys %lmap )
+    {
+	my $t = import_topic($tid);
+	$t->add({code=> $lmap{$tid}});
+    }
+
+
+    dlog "======= retrieving list of all topic aliases";
+    my $list = $odbix->select_list('from talias where talias_active is true and talias_status > 3 order by talias_t');
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	my $t = import_topic( $rec->{talias_t} ) or next;
+	my $str = $rec->{talias};
+
+	debug "Alias $str for ".$t->sysdesig;
+
+	my $al;
+	foreach my $eal ( $t->list('name')->as_array )
+	{
+	    if( lc($eal->plain) eq lc($str) )
+	    {
+		$al = $eal;
+		last;
+	    }
+	}
+
+	unless( $al )
+	{
+	    $al = $L->new($str,$C_term);
+	    $t->add({'name'=>$al});
+	}
+
+	my %props;
+	if( $rec->{talias_autolink} )
+	{
+	    $props{pca_autolink} = 1;
+	}
+
+	if( $rec->{talias_index} )
+	{
+	    $props{pca_index} = 1;
+	}
+
+	$props{url_part} = $rec->{talias_urlpart};
+
+	if( $rec->{talias_language} )
+	{
+	    my $lang =  import_topic( $rec->{talias_language} );
+	    $props{is_of_language} = $lang;
+	}
+
+	# TODO: Set the creator and created date of literal
+	$al->add(\%props);
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+}
+
+sub setup_ts
+{
+    dlog "======= retrieving list of all topic statements";
+    my $list = $odbix->select_list('from ts where ts_active is true and ts_status > 2 order by ts_entry');
+    my( $rec, $error ) = $list->get_first;
+    while(! $error )
+    {
+	my $e = import_topic( $rec->{ts_entry} ) or next;
+	my $t = import_topic( $rec->{ts_topic} ) or next;
+	$e->add_arc({'cia' => $t});
+    }
+    continue
+    {
+	( $rec, $error ) = $list->get_next;
+    }
+}
+
+sub setup_topic
+{
 
 # TODO: Convert reltype 25 zipcode to geo-tree placement
 # TODO: Convert reltype 26 city to geo-tree placement

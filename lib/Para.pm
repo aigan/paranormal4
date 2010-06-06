@@ -125,6 +125,7 @@ sub initialize_db
 
     if( $Rit::Base::VACUUM_ALL )
     {
+	my( $args ) = parse_propargs();
 	my $req = Para::Frame::Request->new_bgrequest();
 	my $start = $ARGV[1] || 99999999;
 	my $vnodes_sth = $Rit::dbix->dbh->prepare("select * from arc where active is true and ver <= $start order by ver desc");
@@ -134,9 +135,10 @@ sub initialize_db
 	my $obj_node_cnt = 0;
 	while( my $rec = $vnodes_sth->fetchrow_hashref )
 	{
-	    my $arc = Rit::Base::Arc->get_by_rec($rec);
+	    my $arc = $Rit::Base::Cache::Resource{ $rec->{'ver'} }
+	      || Rit::Base::Arc->get_by_rec($rec);
 	    # Giving id for traceback debugging
-	    $arc->vacuum(undef,$arc->id);
+	    $arc->vacuum($args, $arc->id);
 
 	    unless( ++$obj_node_cnt % 1000 )
 	    {

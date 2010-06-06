@@ -55,12 +55,13 @@ sub setup_db
     given( $ARGV[1] )
     {
 	when(1){ setup_base() }
-	when(2){ setup_location() }
-	when(3){ setup_member() }
-	when(4){ setup_topic() }
-	when(5){ setup_ts() }
-	when(6){ setup_talias() }
-	when(7){ setup_media() }
+	when(2){ setup_preds() }
+	when(3){ setup_location() }
+	when(4){ setup_member() }
+	when(5){ setup_topic() }
+	when(6){ setup_ts() }
+	when(7){ setup_talias() }
+	when(8){ setup_media() }
     }
 
 
@@ -130,21 +131,29 @@ sub init
     $C_phone_number      = $C->get('phone_number');
     $C_language          = $C->get('language');
     $C_password          = $C->get('password');
-    $pc_topic            = $C->get('pc_topic');
-    $pc_entry            = $C->get('pc_entry');
 
 
+    if( $R->get_by_label('paranormal_sweden_creation',{nonfatal=>1}) )
+    {
+	$pc_topic            = $C->get('pc_topic');
+	$pc_entry            = $C->get('pc_entry');
+	$pc_featured_topic   = $C->get('pc_featured_topic');
+	$word_plural         = $C->get('term_plural');
+	$information_store   = $C->get('information_store');
+	$mia                 = $C->get('mia');
+	$ia                  = $C->get('intelligent_agent');
+	$information_store   = $C->get('information_store');
+	$individual          = $C->get('individual');
+	$practisable         = $C->get('pct_practisable');
+	$organization        = $C->get('organization');
+    }
+}
 
-
-    $pc_featured_topic = $C->get('pc_featured_topic');
-    $word_plural = $C->get('term_plural');
+sub setup_preds
+{
     my $media = $C->get('media');
-    $information_store = $C->get('information_store');
     my $cw = $C->get('cw');
     my $agent_generic = $C->get('agent_generic');
-    $mia = $C->get('mia');
-    $ia = $C->get('intelligent_agent');
-    $information_store = $C->get('information_store');
     my $ais = $C->get('ais');
     my $product = $C->get('product');
     my $gtin = $C->get('gtin');
@@ -153,13 +162,10 @@ sub init
     my $legal_agent = $C->get('legal_agent');
     my $permission_ibt = $C->get('permission_ibt');
     my $person = $C->get('person');
-    $individual = $C->get('individual');
     my $pc_masterpiece = $C->get('pc_masterpiece');
-    $practisable = $C->get('pct_practisable');
     my $experiencable = $C->get('pct_experiencable');
     my $spatial_thing = $C->get('spatial_thing');
     my $location = $C->get('location');
-    $organization = $C->get('organization');
     my $temporal_stuff_type = $C->get('temporal_stuff_type');
 #    = $C->get('');
 #    = $C->get('');
@@ -462,6 +468,8 @@ sub init
 
 sub setup_media
 {
+    setup_preds();
+
     # MEDIA
     #
     # media                 ...
@@ -638,6 +646,8 @@ sub setup_media
 
 sub setup_talias
 {
+    setup_preds();
+
     my %lmap =
       (
        396600 => 'he',
@@ -723,6 +733,8 @@ sub setup_talias
 
 sub setup_ts
 {
+    setup_preds();
+
     dlog "======= retrieving list of all topic statements";
     my $list = $odbix->select_list('from ts where ts_active is true and ts_status > 2 order by ts_entry');
     my( $rec, $error ) = $list->get_first;
@@ -740,6 +752,7 @@ sub setup_ts
 
 sub setup_topic
 {
+    setup_preds();
 
 # TODO: Convert reltype 25 zipcode to geo-tree placement
 # TODO: Convert reltype 26 city to geo-tree placement
@@ -782,6 +795,8 @@ sub setup_topic
 
 sub setup_member
 {
+    setup_preds();
+
     my %map =
       (
        pc_member_id => 'member',
@@ -944,6 +959,8 @@ sub setup_member
 
 sub setup_location
 {
+    setup_preds();
+
     # LOCATIONS
     #
     # country            loc_country

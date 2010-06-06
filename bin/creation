@@ -239,7 +239,7 @@ use Para::Widget;
 
     # Define TT filters
     #
-    warn "Burner for html is ". Para::Frame::Burner->get_by_type('html');
+#    warn "Burner for html is ". Para::Frame::Burner->get_by_type('html');
     Para::Frame::Burner->get_by_type('html')->add_filters({
         'html_psi' => \&Para::Widget::html_psi_factory,
         'html_psi_nolinks' => \&Para::Widget::html_psi_nolinks_factory,
